@@ -28,10 +28,18 @@ cd /Volumes/Storage/UMRK/retroarch-builds
 ./build-mac.sh
 ```
 
+MLP1 vertical-slice build:
+
+```sh
+cd /Volumes/Storage/UMRK/retroarch-builds
+./build-mlp1.sh
+```
+
 Outputs:
 
 - binary: `output/macos/RetroArch`
 - app bundle: `output/macos/RetroArch.app`
+- MLP1 binary: `output/mlp1/bin/retroarch`
 
 ## How it works
 
@@ -58,6 +66,17 @@ The upstream RetroArch source is **not** committed into this repo.
 | `RETROARCH_BUILD_CONFIGURATION` | `Release` | Xcode configuration |
 | `MACOSX_DEPLOYMENT_TARGET` | `11.0` | Modern floor required by the current Xcode toolchain |
 | `ARCHS` | host arch from `uname -m` | Target architecture passed to `xcodebuild` |
+
+### MLP1 environment
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `TOOLCHAIN_IMAGE` | `ghcr.io/utility-muffin-research-kitchen/mlp1-toolchain:local` | Local Docker image used for MLP1 builds |
+| `TOOLCHAIN_REPO` | `/Volumes/Storage/UMRK/mlp1-toolchain` | Toolchain repo mounted for binary verification |
+| `OUTPUT_DIR` | `./output/mlp1` | Final staged MLP1 output |
+| `MLP1_NATIVE_WAYLAND` | `auto` | Enables native Wayland only when SDK development files are present |
+| `MLP1_ENABLE_UDEV` | `auto` | Enables udev only when SDK development files are present |
+| `JOBS` | container CPU count | Parallel make jobs |
 
 ## Notes
 
