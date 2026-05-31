@@ -36,12 +36,22 @@ cd /Volumes/Storage/UMRK/retroarch-builds
 ./smoke-mlp1-command.sh
 ```
 
+Jawaka app tile packaging:
+
+```sh
+cd /Volumes/Storage/UMRK/retroarch-builds
+make package-native
+make install-jawaka-app
+make adb-stage-pak-mlp1
+```
+
 Outputs:
 
 - binary: `output/macos/RetroArch`
 - app bundle: `output/macos/RetroArch.app`
 - MLP1 binary: `output/mlp1/bin/retroarch`
 - MLP1 build manifest: `output/mlp1/build-manifest.json`
+- Jawaka pak: `build/package/RetroArch.pak`
 
 ## How it works
 
@@ -52,6 +62,9 @@ Outputs:
 3. the script copies the finished app bundle and executable into `output/macos`
 4. `build-mlp1.sh` runs inside the local MLP1 toolchain image and writes an
    MLP1 manifest next to the staged binary
+5. the Makefile packages `RetroArch.pak`, a small Jawaka app wrapper that
+   calls `jawaka-retroarch-runner --menu` so shared config policy stays in
+   Jawaka
 
 The upstream RetroArch source is **not** committed into this repo.
 
