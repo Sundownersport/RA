@@ -1,0 +1,374 @@
+diff --git a/command.c b/command.c
+index 791d510547..b505bdb8f2 100644
+--- a/command.c
++++ b/command.c
+@@ -60,6 +60,7 @@
+ #include "cheat_manager.h"
+ #include "content.h"
+ #include "dynamic.h"
++#include "disk_control_interface.h"
+ #include "list_special.h"
+ #include "paths.h"
+ #include "retroarch.h"
+@@ -737,6 +738,273 @@ bool command_show_osd_msg(command_t *cmd, const char* arg)
+     return true;
+ }
+ 
++bool command_pause(command_t *cmd, const char *arg)
++{
++   (void)cmd;
++   (void)arg;
++
++   return command_event(CMD_EVENT_PAUSE, NULL);
++}
++
++bool command_unpause(command_t *cmd, const char *arg)
++{
++   (void)cmd;
++   (void)arg;
++
++   return command_event(CMD_EVENT_UNPAUSE, NULL);
++}
++
++bool command_open_menu(command_t *cmd, const char *arg)
++{
++   (void)cmd;
++   (void)arg;
++
++#ifdef HAVE_MENU
++   {
++      struct menu_state *menu_st = menu_state_get_ptr();
++      if (!(menu_st->flags & MENU_ST_FLAG_ALIVE))
++         retroarch_menu_running();
++   }
++   return true;
++#else
++   return false;
++#endif
++}
++
++bool command_get_info(command_t *cmd, const char *arg)
++{
++   size_t _len                    = 0;
++   char reply[128]                = "";
++   runloop_state_t *runloop_st    = runloop_state_get_ptr();
++   rarch_system_info_t *sys_info  = runloop_st
++      ? (rarch_system_info_t*)&runloop_st->system
++      : NULL;
++   unsigned disk_count            = 0;
++   unsigned disk_slot             = 0;
++   bool savestates_enabled        = core_info_current_supports_savestate();
++   (void)arg;
++
++   if (sys_info)
++   {
++      disk_count = disk_control_get_num_images(&sys_info->disk_control);
++      disk_slot  = disk_control_get_image_index(&sys_info->disk_control);
++   }
++
++   _len  = snprintf(reply, sizeof(reply), "GET_INFO %u %u ", disk_count, disk_slot);
++   if (savestates_enabled)
++      _len += snprintf(reply + _len, sizeof(reply) - _len, "%d",
++            (int)runloop_get_current_savestate());
++   else
++      _len += strlcpy(reply + _len, "NO", sizeof(reply) - _len);
++
++   cmd->replier(cmd, reply, _len);
++   return true;
++}
++
++bool command_get_path(command_t *cmd, const char *arg)
++{
++   size_t _len;
++   char reply[PATH_MAX_LENGTH + 64];
++   char state_path[PATH_MAX_LENGTH];
++   const char *value = NULL;
++
++   state_path[0] = '\0';
++
++   if (string_is_equal(arg, "core"))
++      value = path_get(RARCH_PATH_CORE);
++   else if (string_is_equal(arg, "config"))
++      value = path_get(RARCH_PATH_CONFIG);
++   else if (string_is_equal(arg, "content"))
++      value = path_get(RARCH_PATH_CONTENT);
++   else if (string_is_equal(arg, "config_append"))
++      value = path_get(RARCH_PATH_CONFIG_APPEND);
++   else if (string_is_equal(arg, "config_override"))
++      value = path_get(RARCH_PATH_CONFIG_OVERRIDE);
++   else if (string_is_equal(arg, "core_options"))
++      value = path_get(RARCH_PATH_CORE_OPTIONS);
++   else if (string_is_equal(arg, "default_shader_preset"))
++      value = path_get(RARCH_PATH_DEFAULT_SHADER_PRESET);
++   else if (string_is_equal(arg, "basename"))
++      value = path_get(RARCH_PATH_BASENAME);
++   else if (string_is_equal(arg, "subsystem"))
++      value = path_get(RARCH_PATH_SUBSYSTEM);
++   else if (string_is_equal(arg, "savestate"))
++   {
++      runloop_get_current_savestate_path(state_path, sizeof(state_path));
++      value = state_path;
++   }
++   else
++      value = "";
++
++   _len  = strlcpy(reply, "GET_PATH ", sizeof(reply));
++   _len += strlcpy(reply + _len, arg ? arg : "", sizeof(reply) - _len);
++   _len += strlcpy(reply + _len, " ", sizeof(reply) - _len);
++   if (value)
++      _len += strlcpy(reply + _len, value, sizeof(reply) - _len);
++
++   cmd->replier(cmd, reply, _len);
++   return value && value[0];
++}
++
++bool command_get_disk_count(command_t *cmd, const char *arg)
++{
++   char reply[128]               = "";
++   runloop_state_t *runloop_st   = runloop_state_get_ptr();
++   rarch_system_info_t *sys_info = runloop_st
++      ? (rarch_system_info_t*)&runloop_st->system
++      : NULL;
++   unsigned disk_count           = sys_info
++      ? disk_control_get_num_images(&sys_info->disk_control)
++      : 0;
++   (void)arg;
++
++   snprintf(reply, sizeof(reply), "GET_DISK_COUNT %u", disk_count);
++   cmd->replier(cmd, reply, strlen(reply));
++   return true;
++}
++
++bool command_get_disk_slot(command_t *cmd, const char *arg)
++{
++   char reply[128]               = "";
++   runloop_state_t *runloop_st   = runloop_state_get_ptr();
++   rarch_system_info_t *sys_info = runloop_st
++      ? (rarch_system_info_t*)&runloop_st->system
++      : NULL;
++   unsigned disk_slot            = sys_info
++      ? disk_control_get_image_index(&sys_info->disk_control)
++      : 0;
++   (void)arg;
++
++   snprintf(reply, sizeof(reply), "GET_DISK_SLOT %u", disk_slot);
++   cmd->replier(cmd, reply, strlen(reply));
++   return true;
++}
++
++bool command_set_disk_slot(command_t *cmd, const char *arg)
++{
++   char reply[128]               = "";
++   char *end                     = NULL;
++   runloop_state_t *runloop_st   = runloop_state_get_ptr();
++   rarch_system_info_t *sys_info = runloop_st
++      ? (rarch_system_info_t*)&runloop_st->system
++      : NULL;
++   unsigned long disk            = 0;
++   unsigned disk_count           = sys_info
++      ? disk_control_get_num_images(&sys_info->disk_control)
++      : 0;
++   bool was_ejected              = false;
++   bool ret                      = false;
++
++   if (!arg || !arg[0])
++   {
++      strlcpy(reply, "SET_DISK_SLOT", sizeof(reply));
++      cmd->replier(cmd, reply, strlen(reply));
++      return false;
++   }
++
++   disk = strtoul(arg, &end, 10);
++   snprintf(reply, sizeof(reply), "SET_DISK_SLOT %lu", disk);
++   if (!sys_info || arg == end || (end && *end != '\0') ||
++       disk_count == 0 || disk >= disk_count)
++   {
++      cmd->replier(cmd, reply, strlen(reply));
++      return false;
++   }
++
++   was_ejected = disk_control_get_eject_state(&sys_info->disk_control);
++   if (!was_ejected)
++      disk_control_set_eject_state(&sys_info->disk_control, true, false);
++   ret = disk_control_set_index(&sys_info->disk_control, (unsigned)disk, true);
++   if (!was_ejected)
++      disk_control_set_eject_state(&sys_info->disk_control, false, false);
++
++   cmd->replier(cmd, reply, strlen(reply));
++   return ret;
++}
++
++bool command_get_state_slot(command_t *cmd, const char *arg)
++{
++   char reply[128] = "";
++   (void)arg;
++
++   if (core_info_current_supports_savestate())
++      snprintf(reply, sizeof(reply), "GET_STATE_SLOT %d",
++            (int)runloop_get_current_savestate());
++   else
++      strlcpy(reply, "GET_STATE_SLOT NO", sizeof(reply));
++
++   cmd->replier(cmd, reply, strlen(reply));
++   return true;
++}
++
++bool command_set_state_slot(command_t *cmd, const char *arg)
++{
++   char reply[128] = "";
++   char *end       = NULL;
++   long slot       = 0;
++
++   if (!arg || !arg[0])
++   {
++      strlcpy(reply, "SET_STATE_SLOT", sizeof(reply));
++      cmd->replier(cmd, reply, strlen(reply));
++      return false;
++   }
++
++   slot = strtol(arg, &end, 10);
++   snprintf(reply, sizeof(reply), "SET_STATE_SLOT %ld", slot);
++   if (!core_info_current_supports_savestate() ||
++       arg == end || (end && *end != '\0') || slot < -1)
++   {
++      cmd->replier(cmd, reply, strlen(reply));
++      return false;
++   }
++
++   runloop_set_current_savestate((int)slot);
++   cmd->replier(cmd, reply, strlen(reply));
++   return true;
++}
++
++bool command_save_state_slot(command_t *cmd, const char *arg)
++{
++   char state_path[PATH_MAX_LENGTH] = "";
++   char reply[128]                  = "";
++   char *end                        = NULL;
++   long slot                        = 0;
++   bool savestates_enabled          = core_info_current_supports_savestate();
++   bool ret                         = false;
++
++   if (!arg || !arg[0])
++   {
++      strlcpy(reply, "SAVE_STATE_SLOT", sizeof(reply));
++      cmd->replier(cmd, reply, strlen(reply));
++      return false;
++   }
++
++   slot = strtol(arg, &end, 10);
++   snprintf(reply, sizeof(reply), "SAVE_STATE_SLOT %ld", slot);
++   if (!savestates_enabled || arg == end ||
++       (end && *end != '\0') || slot < -1)
++   {
++      cmd->replier(cmd, reply, strlen(reply));
++      return false;
++   }
++
++   if (!runloop_get_savestate_path(state_path, sizeof(state_path), (int)slot) ||
++       core_serialize_size() == 0)
++   {
++      cmd->replier(cmd, reply, strlen(reply));
++      return false;
++   }
++
++   if (slot == -1)
++      ret = content_auto_save_state(state_path);
++   else
++      ret = content_save_state(state_path, true);
++
++   cmd->replier(cmd, reply, strlen(reply));
++   return ret;
++}
++
+ 
+ bool command_load_state_slot(command_t *cmd, const char *arg)
+ {
+diff --git a/command.h b/command.h
+index 6fd256541b..d005f79753 100644
+--- a/command.h
++++ b/command.h
+@@ -425,7 +425,18 @@ struct cmd_action_map
+ bool command_version(command_t *cmd, const char* arg);
+ bool command_get_status(command_t *cmd, const char* arg);
+ bool command_get_config_param(command_t *cmd, const char* arg);
++bool command_get_path(command_t *cmd, const char* arg);
+ bool command_show_osd_msg(command_t *cmd, const char* arg);
++bool command_pause(command_t *cmd, const char* arg);
++bool command_unpause(command_t *cmd, const char* arg);
++bool command_open_menu(command_t *cmd, const char* arg);
++bool command_get_info(command_t *cmd, const char* arg);
++bool command_get_disk_count(command_t *cmd, const char *arg);
++bool command_get_disk_slot(command_t *cmd, const char *arg);
++bool command_set_disk_slot(command_t *cmd, const char *arg);
++bool command_get_state_slot(command_t *cmd, const char *arg);
++bool command_set_state_slot(command_t *cmd, const char *arg);
++bool command_save_state_slot(command_t *cmd, const char *arg);
+ bool command_load_state_slot(command_t *cmd, const char* arg);
+ bool command_play_replay_slot(command_t *cmd, const char* arg);
+ bool command_seek_replay(command_t *cmd, const char *arg);
+@@ -446,6 +456,7 @@ static const struct cmd_action_map action_map[] = {
+    { "VERSION",          command_version,          "No argument"},
+    { "GET_STATUS",       command_get_status,       "No argument" },
+    { "GET_CONFIG_PARAM", command_get_config_param, "<param name>" },
++   { "GET_PATH",         command_get_path,         "<path type>" },
+    { "SHOW_MSG",         command_show_osd_msg,     "No argument" },
+ #if defined(HAVE_CHEEVOS)
+    /* These functions use achievement addresses and only work if a game with achievements is
+@@ -456,6 +467,17 @@ static const struct cmd_action_map action_map[] = {
+    { "READ_CORE_MEMORY", command_read_memory,      "<address> <number of bytes>" },
+    { "WRITE_CORE_MEMORY",command_write_memory,     "<address> <byte1> <byte2> ..." },
+ 
++   { "PAUSE",            command_pause,            "No argument" },
++   { "UNPAUSE",          command_unpause,          "No argument" },
++   { "OPEN_MENU",        command_open_menu,        "No argument" },
++   { "GET_INFO",         command_get_info,         "No argument" },
++   { "GET_DISK_COUNT",   command_get_disk_count,   "No argument" },
++   { "GET_DISK_SLOT",    command_get_disk_slot,    "No argument" },
++   { "SET_DISK_SLOT",    command_set_disk_slot,    "<disk number>" },
++   { "GET_STATE_SLOT",   command_get_state_slot,   "No argument" },
++   { "SET_STATE_SLOT",   command_set_state_slot,   "<slot number>" },
++   { "SAVE_STATE_SLOT",  command_save_state_slot,  "<slot number>" },
++
+    { "LOAD_STATE_SLOT",command_load_state_slot, "<slot number>"},
+    { "PLAY_REPLAY_SLOT",command_play_replay_slot, "<slot number>"},
+    { "SEEK_REPLAY",command_seek_replay, "<frame number>"},
+diff --git a/runloop.c b/runloop.c
+index 679517b280..0f6c84030b 100644
+--- a/runloop.c
++++ b/runloop.c
+@@ -7612,6 +7612,19 @@ void runloop_task_msg_queue_push(retro_task_t *task, const char *msg,
+             MESSAGE_QUEUE_ICON_DEFAULT, MESSAGE_QUEUE_CATEGORY_INFO);
+ }
+ 
++int runloop_get_current_savestate(void)
++{
++   settings_t *settings = config_get_ptr();
++   return settings ? settings->ints.state_slot : 0;
++}
++
++void runloop_set_current_savestate(int state_slot)
++{
++   settings_t *settings = config_get_ptr();
++   if (settings)
++      settings->ints.state_slot = state_slot;
++}
++
+ bool runloop_get_current_savestate_path(char *s, size_t len)
+ {
+    settings_t *settings        = config_get_ptr();
+diff --git a/runloop.h b/runloop.h
+index e9c72b72dc..e1bbeaa438 100644
+--- a/runloop.h
++++ b/runloop.h
+@@ -421,6 +421,10 @@ uint32_t runloop_get_flags(void);
+ 
+ bool runloop_get_entry_state_path(char *path, size_t len, int slot);
+ 
++int runloop_get_current_savestate(void);
++
++void runloop_set_current_savestate(int state_slot);
++
+ bool runloop_get_current_savestate_path(char *path, size_t len);
+ 
+ bool runloop_get_savestate_path(char *path, size_t len, int slot);

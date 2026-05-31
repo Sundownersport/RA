@@ -36,6 +36,14 @@ cd /Volumes/Storage/UMRK/retroarch-builds
 ./smoke-mlp1-command.sh
 ```
 
+MLP1 build with the in-game-menu command surface:
+
+```sh
+cd /Volumes/Storage/UMRK/retroarch-builds
+MLP1_PATCH_SET=command-menu ./build-mlp1.sh
+./smoke-mlp1-command.sh
+```
+
 Jawaka app tile packaging:
 
 ```sh
@@ -94,8 +102,8 @@ The upstream RetroArch source is **not** committed into this repo.
 | `BUILD_MANIFEST` | `./output/mlp1/build-manifest.json` | Generated manifest for the MLP1 binary |
 | `MLP1_NATIVE_WAYLAND` | `auto` | Enables native Wayland only when SDK development files are present |
 | `MLP1_ENABLE_UDEV` | `auto` | Enables udev only when SDK development files are present |
-| `MLP1_APPLY_COMMON_PATCHES` | `0` | Reserved switch for selected common patches; blocked until the clean command build is verified |
-| `MLP1_PATCH_SET` | empty | Reserved explicit patch list for future MLP1 patch slices |
+| `MLP1_APPLY_COMMON_PATCHES` | `0` | Disabled guard against applying Spruce/common patches implicitly |
+| `MLP1_PATCH_SET` | empty | Comma-separated explicit patch set; currently supports `command-menu` |
 | `JOBS` | container CPU count | Parallel make jobs |
 
 ## Notes
@@ -112,3 +120,8 @@ The upstream RetroArch source is **not** committed into this repo.
   with `--enable-networking` and `--enable-command`. Spruce/common patches are
   not applied implicitly; add them one at a time only after MLP1 testing proves
   they are needed.
+- `MLP1_PATCH_SET=command-menu` applies only
+  `patches/mlp1/0001-command-menu-commands.patch`, which adds the focused
+  UDP commands Jawaka needs for an out-of-process in-game menu. The build
+  script reverses applied patches before exiting so `workdir/src/RetroArch`
+  stays reusable for later clean or patched builds.

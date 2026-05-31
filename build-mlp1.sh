@@ -12,8 +12,9 @@ OUTPUT_DIR="${OUTPUT_DIR:-$REPO_ROOT/output/mlp1}"
 OUTPUT_BIN_DIR="${OUTPUT_BIN_DIR:-$OUTPUT_DIR/bin}"
 BUILD_MANIFEST="${BUILD_MANIFEST:-$OUTPUT_DIR/build-manifest.json}"
 JOBS="${JOBS:-}"
-MLP1_NATIVE_WAYLAND="${MLP1_NATIVE_WAYLAND:-auto}"
+MLP1_NATIVE_WAYLAND="${MLP1_NATIVE_WAYLAND:-0}"
 MLP1_ENABLE_UDEV="${MLP1_ENABLE_UDEV:-auto}"
+MLP1_ENABLE_MALI_FBDEV="${MLP1_ENABLE_MALI_FBDEV:-0}"
 MLP1_APPLY_COMMON_PATCHES="${MLP1_APPLY_COMMON_PATCHES:-0}"
 MLP1_PATCH_SET="${MLP1_PATCH_SET:-}"
 
@@ -36,6 +37,7 @@ if [[ "${IN_MLP1_CONTAINER:-0}" != "1" ]]; then
         -e JOBS="${JOBS:-}" \
         -e MLP1_NATIVE_WAYLAND="$MLP1_NATIVE_WAYLAND" \
         -e MLP1_ENABLE_UDEV="$MLP1_ENABLE_UDEV" \
+        -e MLP1_ENABLE_MALI_FBDEV="$MLP1_ENABLE_MALI_FBDEV" \
         -e MLP1_APPLY_COMMON_PATCHES="$MLP1_APPLY_COMMON_PATCHES" \
         -e MLP1_PATCH_SET="$MLP1_PATCH_SET" \
         -v "$REPO_ROOT":/workspace \
@@ -94,6 +96,20 @@ case "$MLP1_ENABLE_UDEV" in
         ;;
 esac
 
+mali_fbdev_flag="--disable-mali_fbdev"
+case "$MLP1_ENABLE_MALI_FBDEV" in
+    1|true|yes|on)
+        mali_fbdev_flag="--enable-mali_fbdev"
+        ;;
+    0|false|no|off|"")
+        mali_fbdev_flag="--disable-mali_fbdev"
+        ;;
+    *)
+        echo "invalid MLP1_ENABLE_MALI_FBDEV=$MLP1_ENABLE_MALI_FBDEV" >&2
+        exit 1
+        ;;
+esac
+
 apply_common_patches=false
 case "$MLP1_APPLY_COMMON_PATCHES" in
     1|true|yes|on)
@@ -108,18 +124,77 @@ case "$MLP1_APPLY_COMMON_PATCHES" in
         ;;
 esac
 
-if [[ -n "$MLP1_PATCH_SET" && "$apply_common_patches" != "true" ]]; then
-    echo "MLP1_PATCH_SET requires MLP1_APPLY_COMMON_PATCHES=1" >&2
-    exit 1
-fi
-
 if [[ "$apply_common_patches" == "true" ]]; then
-    echo "MLP1 common patch application is intentionally disabled for the first command-capable build." >&2
-    echo "Verify the clean command build first, then wire individual patches by name." >&2
+    echo "MLP1_APPLY_COMMON_PATCHES is intentionally disabled." >&2
+    echo "Use MLP1_PATCH_SET with explicit patch names instead." >&2
     exit 1
 fi
 
 patches_applied=()
+patches_to_unapply=()
+
+cleanup_applied_patches() {
+    local i patch
+
+    if [[ "${#patches_to_unapply[@]}" -eq 0 ]]; then
+        return
+    fi
+
+    for ((i=${#patches_to_unapply[@]} - 1; i >= 0; i--)); do
+        patch="${patches_to_unapply[$i]}"
+        if git apply --reverse --check "$patch" >/dev/null 2>&1; then
+            git apply --reverse "$patch" || true
+        else
+            echo "warning: could not reverse applied patch: $patch" >&2
+        fi
+    done
+}
+
+trap cleanup_applied_patches EXIT
+
+apply_named_patch() {
+    local name="$1"
+    local patch_path
+    local patch_label
+
+    case "$name" in
+        portrait-rotation)
+            patch_path="$REPO_ROOT/patches/common/0002-portrait-panel-landscape-rotation.patch"
+            patch_label="common/$(basename "$patch_path")"
+            ;;
+        command-menu)
+            patch_path="$REPO_ROOT/patches/mlp1/0001-command-menu-commands.patch"
+            patch_label="mlp1/$(basename "$patch_path")"
+            ;;
+        "")
+            return 0
+            ;;
+        *)
+            echo "unknown MLP1 patch set entry: $name" >&2
+            echo "known entries: portrait-rotation, command-menu" >&2
+            exit 1
+            ;;
+    esac
+
+    if [[ ! -f "$patch_path" ]]; then
+        echo "missing MLP1 patch file: $patch_path" >&2
+        exit 1
+    fi
+
+    echo "Applying MLP1 patch: $name"
+    git apply --check "$patch_path"
+    git apply "$patch_path"
+    patches_applied+=("$patch_label")
+    patches_to_unapply+=("$patch_path")
+}
+
+if [[ -n "$MLP1_PATCH_SET" ]]; then
+    IFS=',' read -r -a patch_set_entries <<< "$MLP1_PATCH_SET"
+    for patch_entry in "${patch_set_entries[@]}"; do
+        patch_entry="${patch_entry//[[:space:]]/}"
+        apply_named_patch "$patch_entry"
+    done
+fi
 
 make distclean >/dev/null 2>&1 || true
 
@@ -145,6 +220,7 @@ configure_flags=(
     "--disable-opengl1"
     "--disable-opengl_core"
     "--disable-kms"
+    "$mali_fbdev_flag"
     "--disable-ssl"
     "--enable-networking"
     "--enable-command"
@@ -218,6 +294,7 @@ mkdir -p "$(dirname "$BUILD_MANIFEST")"
     printf '  "patches_applied": '; json_array "${patches_applied[@]}"; printf ",\n"
     printf "  \"patch_controls\": {\n"
     printf '    "MLP1_APPLY_COMMON_PATCHES": '; json_string "$MLP1_APPLY_COMMON_PATCHES"; printf ",\n"
+    printf '    "MLP1_ENABLE_MALI_FBDEV": '; json_string "$MLP1_ENABLE_MALI_FBDEV"; printf ",\n"
     printf '    "MLP1_PATCH_SET": '; json_string "$MLP1_PATCH_SET"; printf "\n"
     printf "  },\n"
     printf '  "toolchain_image": '; json_string "$TOOLCHAIN_IMAGE"; printf ",\n"
