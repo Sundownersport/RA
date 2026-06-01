@@ -22,10 +22,12 @@ if [ -z "$SERIAL" ]; then
 fi
 
 ADB="adb -s $SERIAL"
-REMOTE_DIR="/mnt/sdcard/Apps/RetroArch.pak"
+REMOTE_SDCARD_PATH="${REMOTE_SDCARD_PATH:-/mnt/sdcard}"
+REMOTE_APPS_PATH="${REMOTE_APPS_PATH:-$REMOTE_SDCARD_PATH/Apps}"
+REMOTE_DIR="${REMOTE_DIR:-$REMOTE_APPS_PATH/RetroArch.pak}"
 
-$ADB shell "mountpoint -q /mnt/sdcard" >/dev/null || {
-    echo "/mnt/sdcard is not mounted on the device." >&2
+$ADB shell "mountpoint -q '$REMOTE_SDCARD_PATH'" >/dev/null || {
+    echo "$REMOTE_SDCARD_PATH is not mounted on the device." >&2
     exit 1
 }
 

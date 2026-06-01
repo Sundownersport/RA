@@ -2,14 +2,31 @@
 set -eu
 
 APP_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+PAK_SDCARD_ROOT=$(CDPATH= cd -- "$APP_DIR/../.." && pwd)
+MLP1_DEFAULT_SDCARD_PATH=/mnt/sdcard
 
-if [ -n "${JAWAKA_SDCARD_ROOT:-}" ]; then
-    SDROOT=$JAWAKA_SDCARD_ROOT
-elif [ -d /mnt/sdcard ]; then
-    SDROOT=/mnt/sdcard
-else
-    SDROOT=$(CDPATH= cd -- "$APP_DIR/../.." && pwd)
+if [ -n "${UMRK_ENV_FILE:-}" ] && [ -f "$UMRK_ENV_FILE" ]; then
+    . "$UMRK_ENV_FILE"
+elif [ -n "${SDCARD_PATH:-}" ] && [ -f "$SDCARD_PATH/umrk-launcher/env.sh" ]; then
+    . "$SDCARD_PATH/umrk-launcher/env.sh"
+elif [ -f "$PAK_SDCARD_ROOT/umrk-launcher/env.sh" ]; then
+    . "$PAK_SDCARD_ROOT/umrk-launcher/env.sh"
 fi
+
+if [ -z "${PLATFORM:-}" ]; then
+    case "$PAK_SDCARD_ROOT" in
+        "$MLP1_DEFAULT_SDCARD_PATH") PLATFORM=mlp1 ;;
+        *) PLATFORM=mac ;;
+    esac
+fi
+SDCARD_PATH=${SDCARD_PATH:-${JAWAKA_SDCARD_ROOT:-$PAK_SDCARD_ROOT}}
+if [ -z "${UMRK_LAUNCHER_PATH:-}" ]; then
+    case "$PLATFORM" in
+        tg5040|tg5050|my355) UMRK_LAUNCHER_PATH=${SYSTEM_PATH:-$SDCARD_PATH/.system/$PLATFORM} ;;
+        *) UMRK_LAUNCHER_PATH=$SDCARD_PATH/umrk-launcher ;;
+    esac
+fi
+UMRK_BIN_PATH=${UMRK_BIN_PATH:-$UMRK_LAUNCHER_PATH/bin}
 
 find_runner() {
     if [ -n "${JAWAKA_RETROARCH_RUNNER:-}" ] && [ -x "$JAWAKA_RETROARCH_RUNNER" ]; then
@@ -18,9 +35,7 @@ find_runner() {
     fi
 
     for candidate in \
-        "$SDROOT/umrk-launcher/bin/jawaka-retroarch-runner" \
-        "/mnt/sdcard/umrk-launcher/bin/jawaka-retroarch-runner" \
-        "/Volumes/Storage/UMRK/Jawaka/build/bin/jawaka-retroarch-runner" \
+        "$UMRK_BIN_PATH/jawaka-retroarch-runner" \
         "$APP_DIR/../../umrk-launcher/bin/jawaka-retroarch-runner"
     do
         if [ -x "$candidate" ]; then
@@ -37,7 +52,11 @@ RUNNER=$(find_runner) || {
     exit 127
 }
 
-export JAWAKA_SDCARD_ROOT=$SDROOT
+export PLATFORM
+export SDCARD_PATH
+export UMRK_LAUNCHER_PATH
+export UMRK_BIN_PATH
+export JAWAKA_SDCARD_ROOT=$SDCARD_PATH
 export JAWAKA_RETROARCH_APP_ROOT=$APP_DIR
 
 exec "$RUNNER" --menu

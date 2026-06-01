@@ -2,9 +2,13 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_TOOLCHAIN_REPO=""
+if [[ -d "$REPO_ROOT/../mlp1-toolchain" ]]; then
+    DEFAULT_TOOLCHAIN_REPO="$(cd "$REPO_ROOT/../mlp1-toolchain" && pwd)"
+fi
 
 TOOLCHAIN_IMAGE="${TOOLCHAIN_IMAGE:-ghcr.io/utility-muffin-research-kitchen/mlp1-toolchain:local}"
-TOOLCHAIN_REPO="${TOOLCHAIN_REPO:-/Volumes/Storage/UMRK/mlp1-toolchain}"
+TOOLCHAIN_REPO="${TOOLCHAIN_REPO:-$DEFAULT_TOOLCHAIN_REPO}"
 RETROARCH_VERSION="${RETROARCH_VERSION:-v1.22.2}"
 RETROARCH_UPSTREAM_URL="${RETROARCH_UPSTREAM_URL:-https://github.com/libretro/RetroArch.git}"
 RETROARCH_SRC_DIR="${RETROARCH_SRC_DIR:-$REPO_ROOT/workdir/src/RetroArch}"
@@ -19,6 +23,10 @@ MLP1_APPLY_COMMON_PATCHES="${MLP1_APPLY_COMMON_PATCHES:-0}"
 MLP1_PATCH_SET="${MLP1_PATCH_SET:-}"
 
 if [[ "${IN_MLP1_CONTAINER:-0}" != "1" ]]; then
+    if [[ -z "$TOOLCHAIN_REPO" ]]; then
+        echo "TOOLCHAIN_REPO is required when ../mlp1-toolchain is not present." >&2
+        exit 1
+    fi
     if ! docker image inspect "$TOOLCHAIN_IMAGE" >/dev/null 2>&1; then
         echo "missing Docker image: $TOOLCHAIN_IMAGE" >&2
         echo "build it with: make -C $TOOLCHAIN_REPO image" >&2

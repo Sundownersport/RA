@@ -23,7 +23,6 @@ is the cleanest working path:
 ## Quick start
 
 ```sh
-cd /Volumes/Storage/UMRK/retroarch-builds
 ./bootstrap-mac.sh
 ./build-mac.sh
 ```
@@ -31,7 +30,6 @@ cd /Volumes/Storage/UMRK/retroarch-builds
 MLP1 vertical-slice build:
 
 ```sh
-cd /Volumes/Storage/UMRK/retroarch-builds
 ./build-mlp1.sh
 ./smoke-mlp1-command.sh
 ```
@@ -39,7 +37,6 @@ cd /Volumes/Storage/UMRK/retroarch-builds
 MLP1 build with the in-game-menu command surface:
 
 ```sh
-cd /Volumes/Storage/UMRK/retroarch-builds
 MLP1_PATCH_SET=command-menu ./build-mlp1.sh
 ./smoke-mlp1-command.sh
 ```
@@ -47,7 +44,6 @@ MLP1_PATCH_SET=command-menu ./build-mlp1.sh
 Jawaka app tile packaging:
 
 ```sh
-cd /Volumes/Storage/UMRK/retroarch-builds
 make package-native
 make install-jawaka-app
 make adb-stage-pak-mlp1
@@ -97,7 +93,7 @@ The upstream RetroArch source is **not** committed into this repo.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `TOOLCHAIN_IMAGE` | `ghcr.io/utility-muffin-research-kitchen/mlp1-toolchain:local` | Local Docker image used for MLP1 builds |
-| `TOOLCHAIN_REPO` | `/Volumes/Storage/UMRK/mlp1-toolchain` | Toolchain repo mounted for binary verification |
+| `TOOLCHAIN_REPO` | adjacent `../mlp1-toolchain` checkout | Toolchain repo mounted for binary verification |
 | `OUTPUT_DIR` | `./output/mlp1` | Final staged MLP1 output |
 | `BUILD_MANIFEST` | `./output/mlp1/build-manifest.json` | Generated manifest for the MLP1 binary |
 | `MLP1_NATIVE_WAYLAND` | `auto` | Enables native Wayland only when SDK development files are present |
