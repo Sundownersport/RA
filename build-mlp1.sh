@@ -174,12 +174,16 @@ apply_named_patch() {
             patch_path="$REPO_ROOT/patches/mlp1/0001-command-menu-commands.patch"
             patch_label="mlp1/$(basename "$patch_path")"
             ;;
+        jawaka-load-content)
+            patch_path="$REPO_ROOT/patches/mlp1/0002-jawaka-load-content-command.patch"
+            patch_label="mlp1/$(basename "$patch_path")"
+            ;;
         "")
             return 0
             ;;
         *)
             echo "unknown MLP1 patch set entry: $name" >&2
-            echo "known entries: portrait-rotation, command-menu" >&2
+            echo "known entries: portrait-rotation, command-menu, jawaka-load-content" >&2
             exit 1
             ;;
     esac

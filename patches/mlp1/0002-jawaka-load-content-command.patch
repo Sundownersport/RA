@@ -1,0 +1,95 @@
+diff --git a/command.c b/command.c
+index 791d510547..72d0d9ebd8 100644
+--- a/command.c
++++ b/command.c
+@@ -71,6 +71,9 @@
+ 
+ #define CMD_BUF_SIZE 4096
+ 
++static char g_jawaka_pending_load_content_path[PATH_MAX_LENGTH];
++static bool g_jawaka_pending_load_content;
++
+ static void command_post_state_loaded(void)
+ {
+ #ifdef HAVE_CHEEVOS
+@@ -953,6 +956,44 @@ bool command_load_core(command_t *cmd, const char* arg)
+    return true;
+ }
+ 
++bool command_jawaka_load_content(command_t *cmd, const char *arg)
++{
++   char reply[PATH_MAX_LENGTH + 64];
++
++   if (!arg || !arg[0] || !path_is_valid(arg))
++   {
++      snprintf(reply, sizeof(reply), "JAWAKA_LOAD_CONTENT NO %s",
++            (arg && arg[0]) ? arg : "");
++      cmd->replier(cmd, reply, strlen(reply));
++      return false;
++   }
++
++   strlcpy(g_jawaka_pending_load_content_path, arg,
++         sizeof(g_jawaka_pending_load_content_path));
++   g_jawaka_pending_load_content = true;
++
++   snprintf(reply, sizeof(reply), "JAWAKA_LOAD_CONTENT OK %s", arg);
++   cmd->replier(cmd, reply, strlen(reply));
++   return true;
++}
++
++void command_jawaka_process_pending_load_content(void)
++{
++   char path[PATH_MAX_LENGTH];
++   content_ctx_info_t content_info = {0};
++
++   if (!g_jawaka_pending_load_content)
++      return;
++
++   strlcpy(path, g_jawaka_pending_load_content_path, sizeof(path));
++   g_jawaka_pending_load_content_path[0] = '\0';
++   g_jawaka_pending_load_content = false;
++
++   command_event(CMD_EVENT_UNPAUSE, NULL);
++   task_push_load_content_with_core(path,
++         &content_info, CORE_TYPE_PLAIN, NULL, NULL);
++}
++
+ static const rarch_memory_descriptor_t* command_memory_get_descriptor(const rarch_memory_map_t* mmap, unsigned address, size_t* offset)
+ {
+    const rarch_memory_descriptor_t* desc = mmap->descriptors;
+diff --git a/command.h b/command.h
+index 6fd256541b..0d381d558d 100644
+--- a/command.h
++++ b/command.h
+@@ -438,6 +438,8 @@ bool command_write_ram(command_t *cmd, const char *arg);
+ bool command_read_memory(command_t *cmd, const char *arg);
+ bool command_write_memory(command_t *cmd, const char *arg);
+ bool command_load_core(command_t *cmd, const char* arg);
++bool command_jawaka_load_content(command_t *cmd, const char *arg);
++void command_jawaka_process_pending_load_content(void);
+ 
+ static const struct cmd_action_map action_map[] = {
+ #if defined(HAVE_CG) || defined(HAVE_GLSL) || defined(HAVE_SLANG) || defined(HAVE_HLSL)
+@@ -464,6 +466,7 @@ static const struct cmd_action_map action_map[] = {
+    { "LOAD_FILES", command_load_savefiles, "No argument"},
+ 
+    { "LOAD_CORE", command_load_core, "<core path>"},
++   { "JAWAKA_LOAD_CONTENT", command_jawaka_load_content, "<content path>"},
+ };
+ 
+ static const struct cmd_map map[] = {
+diff --git a/input/input_driver.c b/input/input_driver.c
+index beba85e1b2..326922dedd 100644
+--- a/input/input_driver.c
++++ b/input/input_driver.c
+@@ -6477,6 +6477,10 @@ void input_driver_poll(void)
+    if (BSV_MOVIE_IS_PLAYBACK_ON())
+       bsv_movie_poll(input_st);
+ #endif
++
++#ifdef HAVE_COMMAND
++   command_jawaka_process_pending_load_content();
++#endif
+ }
+ 
+ int16_t input_driver_state_wrapper(unsigned port, unsigned device,
