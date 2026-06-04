@@ -7,10 +7,10 @@ MLP1_DEFAULT_SDCARD_PATH=/mnt/sdcard
 
 if [ -n "${UMRK_ENV_FILE:-}" ] && [ -f "$UMRK_ENV_FILE" ]; then
     . "$UMRK_ENV_FILE"
-elif [ -n "${SDCARD_PATH:-}" ] && [ -f "$SDCARD_PATH/umrk-launcher/env.sh" ]; then
-    . "$SDCARD_PATH/umrk-launcher/env.sh"
-elif [ -f "$PAK_SDCARD_ROOT/umrk-launcher/env.sh" ]; then
-    . "$PAK_SDCARD_ROOT/umrk-launcher/env.sh"
+elif [ -n "${SDCARD_PATH:-}" ] && [ -f "$SDCARD_PATH/.system/leaf/launcher/env.sh" ]; then
+    . "$SDCARD_PATH/.system/leaf/launcher/env.sh"
+elif [ -f "$PAK_SDCARD_ROOT/.system/leaf/launcher/env.sh" ]; then
+    . "$PAK_SDCARD_ROOT/.system/leaf/launcher/env.sh"
 fi
 
 if [ -z "${PLATFORM:-}" ]; then
@@ -22,8 +22,7 @@ fi
 SDCARD_PATH=${SDCARD_PATH:-${JAWAKA_SDCARD_ROOT:-$PAK_SDCARD_ROOT}}
 if [ -z "${UMRK_LAUNCHER_PATH:-}" ]; then
     case "$PLATFORM" in
-        tg5040|tg5050|my355) UMRK_LAUNCHER_PATH=${SYSTEM_PATH:-$SDCARD_PATH/.system/$PLATFORM} ;;
-        *) UMRK_LAUNCHER_PATH=$SDCARD_PATH/umrk-launcher ;;
+        *) UMRK_LAUNCHER_PATH=$SDCARD_PATH/.system/leaf/launcher ;;
     esac
 fi
 UMRK_BIN_PATH=${UMRK_BIN_PATH:-$UMRK_LAUNCHER_PATH/bin}
@@ -36,7 +35,7 @@ find_runner() {
 
     for candidate in \
         "$UMRK_BIN_PATH/jawaka-retroarch-runner" \
-        "$APP_DIR/../../umrk-launcher/bin/jawaka-retroarch-runner"
+        "$APP_DIR/../../.system/leaf/launcher/bin/jawaka-retroarch-runner"
     do
         if [ -x "$candidate" ]; then
             printf '%s\n' "$candidate"
