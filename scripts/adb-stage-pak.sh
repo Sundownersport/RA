@@ -22,15 +22,26 @@ if [ -z "$SERIAL" ]; then
 fi
 
 ADB="adb -s $SERIAL"
-REMOTE_SDCARD_PATH="${REMOTE_SDCARD_PATH:-/mnt/sdcard}"
+REQUESTED_REMOTE_SDCARD_PATH="${REMOTE_SDCARD_PATH:-auto}"
+RESOLVE_SDCARD_HELPER="$ROOT_DIR/../miniloong-launcher-switcher/scripts/adb-resolve-umrk-sd.sh"
+if [ -x "$RESOLVE_SDCARD_HELPER" ]; then
+    REMOTE_SDCARD_PATH=$(REMOTE_SDCARD_PATH="$REQUESTED_REMOTE_SDCARD_PATH" ADB_SERIAL="$SERIAL" "$RESOLVE_SDCARD_HELPER")
+else
+    if [ -z "$REQUESTED_REMOTE_SDCARD_PATH" ] || [ "$REQUESTED_REMOTE_SDCARD_PATH" = "auto" ]; then
+        echo "Cannot auto-detect active UMRK SD: $RESOLVE_SDCARD_HELPER not found." >&2
+        echo "Set REMOTE_SDCARD_PATH=/mnt/sdcard or REMOTE_SDCARD_PATH=/media/sdcard1." >&2
+        exit 1
+    fi
+    REMOTE_SDCARD_PATH="$REQUESTED_REMOTE_SDCARD_PATH"
+    $ADB shell "mountpoint -q '$REMOTE_SDCARD_PATH'" >/dev/null || {
+        echo "$REMOTE_SDCARD_PATH is not mounted on the device." >&2
+        exit 1
+    }
+fi
 REMOTE_APPS_PATH="${REMOTE_APPS_PATH:-$REMOTE_SDCARD_PATH/Apps}"
 REMOTE_DIR="${REMOTE_DIR:-$REMOTE_APPS_PATH/RetroArch.pak}"
 
-$ADB shell "mountpoint -q '$REMOTE_SDCARD_PATH'" >/dev/null || {
-    echo "$REMOTE_SDCARD_PATH is not mounted on the device." >&2
-    exit 1
-}
-
+echo "Deploying RetroArch.pak to $REMOTE_DIR"
 $ADB shell "rm -rf '$REMOTE_DIR' && mkdir -p '$REMOTE_DIR'"
 $ADB push "$PACKAGE_DIR/." "$REMOTE_DIR/" >/dev/null
 $ADB shell "chmod 755 '$REMOTE_DIR/launch.sh' && find '$REMOTE_DIR' -maxdepth 3 -type f | sort"
