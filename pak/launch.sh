@@ -8,7 +8,8 @@ TG5040_DEFAULT_SDCARD_PATH=/mnt/SDCARD
 find_sdcard_root() {
     probe=$APP_DIR
     while [ "$probe" != "/" ] && [ -n "$probe" ]; do
-        if [ -f "$probe/.system/leaf/launcher/env.sh" ] ||
+        if [ -d "$probe/.system/leaf/platforms" ] ||
+           [ -f "$probe/.system/leaf/launcher/env.sh" ] ||
            { [ -d "$probe/Apps" ] && [ -d "$probe/.system" ]; }; then
             printf '%s\n' "$probe"
             return 0
@@ -43,14 +44,21 @@ infer_platform() {
         return 0
     fi
 
-    echo "PLATFORM is not set; launch from Jawaka or source .system/leaf/launcher/env.sh" >&2
+    echo "PLATFORM is not set; launch from Jawaka or source .system/leaf/platforms/<platform>/launcher/env.sh" >&2
     exit 1
 }
 
 PAK_SDCARD_ROOT=$(find_sdcard_root)
+SDCARD_PATH=${SDCARD_PATH:-${JAWAKA_SDCARD_ROOT:-$PAK_SDCARD_ROOT}}
+if [ -z "${PLATFORM:-}" ]; then
+    PLATFORM=$(infer_platform)
+fi
+PLATFORM_ENV_FILE="$SDCARD_PATH/.system/leaf/platforms/$PLATFORM/launcher/env.sh"
 
 if [ -n "${UMRK_ENV_FILE:-}" ] && [ -f "$UMRK_ENV_FILE" ]; then
     . "$UMRK_ENV_FILE"
+elif [ -f "$PLATFORM_ENV_FILE" ]; then
+    . "$PLATFORM_ENV_FILE"
 elif [ -n "${SDCARD_PATH:-}" ] && [ -f "$SDCARD_PATH/.system/leaf/launcher/env.sh" ]; then
     . "$SDCARD_PATH/.system/leaf/launcher/env.sh"
 elif [ -f "$PAK_SDCARD_ROOT/.system/leaf/launcher/env.sh" ]; then
@@ -62,9 +70,7 @@ if [ -z "${PLATFORM:-}" ]; then
     PLATFORM=$(infer_platform)
 fi
 if [ -z "${UMRK_LAUNCHER_PATH:-}" ]; then
-    case "$PLATFORM" in
-        *) UMRK_LAUNCHER_PATH=$SDCARD_PATH/.system/leaf/launcher ;;
-    esac
+    UMRK_LAUNCHER_PATH=$SDCARD_PATH/.system/leaf/platforms/$PLATFORM/launcher
 fi
 UMRK_BIN_PATH=${UMRK_BIN_PATH:-$UMRK_LAUNCHER_PATH/bin}
 
@@ -76,6 +82,7 @@ find_runner() {
 
     for candidate in \
         "$UMRK_BIN_PATH/jawaka-retroarch-runner" \
+        "$SDCARD_PATH/.system/leaf/platforms/$PLATFORM/launcher/bin/jawaka-retroarch-runner" \
         "$SDCARD_PATH/.system/leaf/launcher/bin/jawaka-retroarch-runner"
     do
         if [ -x "$candidate" ]; then
