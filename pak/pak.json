@@ -1,1 +1,1 @@
-{ "name": "RetroArch", "icon": "", "platform": "all", "pak_version": "0.1.0", "min_jawaka_version": "0.0.1" }
+{ "name": "RetroArch", "icon": "", "platform": "shared", "pak_version": "0.1.0", "min_jawaka_version": "0.0.1" }
