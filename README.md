@@ -34,10 +34,10 @@ MLP1 vertical-slice build:
 ./smoke-mlp1-command.sh
 ```
 
-MLP1 build with the in-game-menu command surface:
+MLP1 build with Jawaka's current patch set:
 
 ```sh
-MLP1_PATCH_SET=command-menu ./build-mlp1.sh
+MLP1_PATCH_SET=portrait-rotation,command-menu,jawaka-load-content ./build-mlp1.sh
 ./smoke-mlp1-command.sh
 ```
 
@@ -45,8 +45,16 @@ Jawaka app tile packaging:
 
 ```sh
 make package-native
+make package-platform PLATFORM=mlp1
 make install-jawaka-app
 make adb-stage-pak-mlp1
+```
+
+Preferred device staging is from `../Leaf`:
+
+```sh
+make -C ../Leaf stage-retroarch DEVICE=mlp1      # binary + cores + info
+make -C ../Leaf stage-app APP=retroarch-builds DEVICE=mlp1
 ```
 
 Outputs:
@@ -55,7 +63,7 @@ Outputs:
 - app bundle: `output/macos/RetroArch.app`
 - MLP1 binary: `output/mlp1/bin/retroarch`
 - MLP1 build manifest: `output/mlp1/build-manifest.json`
-- Jawaka pak: `build/package/RetroArch.pak`
+- Jawaka pak: `build/package/RetroArch.pak` (staged under `Apps/shared/`)
 
 ## How it works
 
@@ -66,8 +74,8 @@ Outputs:
 3. the script copies the finished app bundle and executable into `output/macos`
 4. `build-mlp1.sh` runs inside the local MLP1 toolchain image and writes an
    MLP1 manifest next to the staged binary
-5. the Makefile packages `RetroArch.pak`, a small Jawaka app wrapper that
-   calls `jawaka-retroarch-runner --menu` so shared config policy stays in
+5. the Makefile packages `RetroArch.pak`, a small shared Jawaka app wrapper
+   that calls `jawaka-retroarch-runner --menu` so shared config policy stays in
    Jawaka
 
 The upstream RetroArch source is **not** committed into this repo.
@@ -96,11 +104,20 @@ The upstream RetroArch source is **not** committed into this repo.
 | `TOOLCHAIN_REPO` | adjacent `../mlp1-toolchain` checkout | Toolchain repo mounted for binary verification |
 | `OUTPUT_DIR` | `./output/mlp1` | Final staged MLP1 output |
 | `BUILD_MANIFEST` | `./output/mlp1/build-manifest.json` | Generated manifest for the MLP1 binary |
-| `MLP1_NATIVE_WAYLAND` | `auto` | Enables native Wayland only when SDK development files are present |
+| `MLP1_NATIVE_WAYLAND` | `0` | Native Wayland path; default uses SDL2 video |
 | `MLP1_ENABLE_UDEV` | `auto` | Enables udev only when SDK development files are present |
+| `MLP1_ENABLE_MALI_FBDEV` | `0` | Optional Mali fbdev build flag |
 | `MLP1_APPLY_COMMON_PATCHES` | `0` | Disabled guard against applying Spruce/common patches implicitly |
-| `MLP1_PATCH_SET` | empty | Comma-separated explicit patch set; currently supports `command-menu` |
+| `MLP1_PATCH_SET` | empty | Comma-separated explicit patch set |
 | `JOBS` | container CPU count | Parallel make jobs |
+
+Supported `MLP1_PATCH_SET` entries:
+
+| Entry | Purpose |
+| --- | --- |
+| `portrait-rotation` | rotate RetroArch's logical landscape output for the MLP1 portrait panel |
+| `command-menu` | add focused UDP command-menu commands for Jawaka |
+| `jawaka-load-content` | add Jawaka's load-content command path for resident/same-core switching |
 
 ## Notes
 
@@ -114,10 +131,8 @@ The upstream RetroArch source is **not** committed into this repo.
   host has the Metal Toolchain component installed.
 - The MLP1 lane intentionally starts from a clean upstream RetroArch checkout
   with `--enable-networking` and `--enable-command`. Spruce/common patches are
-  not applied implicitly; add them one at a time only after MLP1 testing proves
-  they are needed.
-- `MLP1_PATCH_SET=command-menu` applies only
-  `patches/mlp1/0001-command-menu-commands.patch`, which adds the focused
-  UDP commands Jawaka needs for an out-of-process in-game menu. The build
-  script reverses applied patches before exiting so `workdir/src/RetroArch`
-  stays reusable for later clean or patched builds.
+  not applied implicitly; use `MLP1_PATCH_SET` with explicit patch names.
+- Leaf's default MLP1 runtime build uses
+  `portrait-rotation,command-menu,jawaka-load-content`.
+- The build script reverses applied patches before exiting so
+  `workdir/src/RetroArch` stays reusable for later clean or patched builds.
