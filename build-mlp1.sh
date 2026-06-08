@@ -224,7 +224,7 @@ configure_flags=(
     "--disable-discord"
     "--disable-x11"
     "$wayland_flag"
-    "--disable-pulse"
+    "--enable-pulse"
     "--disable-jack"
     "--disable-oss"
     "--disable-vulkan"
