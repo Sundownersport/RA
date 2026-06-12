@@ -16,6 +16,7 @@ package package-native package-mlp1:
 	@mkdir -p "$(PACKAGE_DIR)"
 	@cp -f "pak/launch.sh" "$(PACKAGE_DIR)/launch.sh"
 	@cp -f "pak/pak.json" "$(PACKAGE_DIR)/pak.json"
+	@cp -R "pak/res" "$(PACKAGE_DIR)/res"
 	@chmod 755 "$(PACKAGE_DIR)/launch.sh"
 	@find "$(PACKAGE_DIR)" -maxdepth 2 -type f -print | sort
 
