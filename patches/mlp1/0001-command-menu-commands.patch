@@ -10,7 +10,7 @@ index 791d510547..b505bdb8f2 100644
  #include "list_special.h"
  #include "paths.h"
  #include "retroarch.h"
-@@ -737,6 +738,273 @@ bool command_show_osd_msg(command_t *cmd, const char* arg)
+@@ -737,6 +738,281 @@ bool command_show_osd_msg(command_t *cmd, const char* arg)
      return true;
  }
  
@@ -28,6 +28,14 @@ index 791d510547..b505bdb8f2 100644
 +   (void)arg;
 +
 +   return command_event(CMD_EVENT_UNPAUSE, NULL);
++}
++
++bool command_audio_reinit(command_t *cmd, const char *arg)
++{
++   (void)cmd;
++   (void)arg;
++
++   return command_event(CMD_EVENT_AUDIO_REINIT, NULL);
 +}
 +
 +bool command_open_menu(command_t *cmd, const char *arg)
@@ -288,7 +296,7 @@ diff --git a/command.h b/command.h
 index 6fd256541b..d005f79753 100644
 --- a/command.h
 +++ b/command.h
-@@ -425,7 +425,18 @@ struct cmd_action_map
+@@ -425,7 +425,19 @@ struct cmd_action_map
  bool command_version(command_t *cmd, const char* arg);
  bool command_get_status(command_t *cmd, const char* arg);
  bool command_get_config_param(command_t *cmd, const char* arg);
@@ -296,6 +304,7 @@ index 6fd256541b..d005f79753 100644
  bool command_show_osd_msg(command_t *cmd, const char* arg);
 +bool command_pause(command_t *cmd, const char* arg);
 +bool command_unpause(command_t *cmd, const char* arg);
++bool command_audio_reinit(command_t *cmd, const char* arg);
 +bool command_open_menu(command_t *cmd, const char* arg);
 +bool command_get_info(command_t *cmd, const char* arg);
 +bool command_get_disk_count(command_t *cmd, const char *arg);
@@ -315,12 +324,13 @@ index 6fd256541b..d005f79753 100644
     { "SHOW_MSG",         command_show_osd_msg,     "No argument" },
  #if defined(HAVE_CHEEVOS)
     /* These functions use achievement addresses and only work if a game with achievements is
-@@ -456,6 +467,17 @@ static const struct cmd_action_map action_map[] = {
+@@ -456,6 +467,18 @@ static const struct cmd_action_map action_map[] = {
     { "READ_CORE_MEMORY", command_read_memory,      "<address> <number of bytes>" },
     { "WRITE_CORE_MEMORY",command_write_memory,     "<address> <byte1> <byte2> ..." },
  
 +   { "PAUSE",            command_pause,            "No argument" },
 +   { "UNPAUSE",          command_unpause,          "No argument" },
++   { "AUDIO_REINIT",     command_audio_reinit,     "No argument" },
 +   { "OPEN_MENU",        command_open_menu,        "No argument" },
 +   { "GET_INFO",         command_get_info,         "No argument" },
 +   { "GET_DISK_COUNT",   command_get_disk_count,   "No argument" },
