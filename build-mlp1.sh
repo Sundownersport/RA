@@ -16,6 +16,7 @@ OUTPUT_DIR="${OUTPUT_DIR:-$REPO_ROOT/output/mlp1}"
 OUTPUT_BIN_DIR="${OUTPUT_BIN_DIR:-$OUTPUT_DIR/bin}"
 BUILD_MANIFEST="${BUILD_MANIFEST:-$OUTPUT_DIR/build-manifest.json}"
 JOBS="${JOBS:-}"
+MLP1_BUILD_PROFILE="${MLP1_BUILD_PROFILE:-release}"
 MLP1_NATIVE_WAYLAND="${MLP1_NATIVE_WAYLAND:-0}"
 MLP1_ENABLE_UDEV="${MLP1_ENABLE_UDEV:-auto}"
 MLP1_ENABLE_MALI_FBDEV="${MLP1_ENABLE_MALI_FBDEV:-0}"
@@ -43,6 +44,7 @@ if [[ "${IN_MLP1_CONTAINER:-0}" != "1" ]]; then
         -e OUTPUT_BIN_DIR=/workspace/output/mlp1/bin \
         -e BUILD_MANIFEST=/workspace/output/mlp1/build-manifest.json \
         -e JOBS="${JOBS:-}" \
+        -e MLP1_BUILD_PROFILE="$MLP1_BUILD_PROFILE" \
         -e MLP1_NATIVE_WAYLAND="$MLP1_NATIVE_WAYLAND" \
         -e MLP1_ENABLE_UDEV="$MLP1_ENABLE_UDEV" \
         -e MLP1_ENABLE_MALI_FBDEV="$MLP1_ENABLE_MALI_FBDEV" \
@@ -57,6 +59,18 @@ if [[ "${IN_MLP1_CONTAINER:-0}" != "1" ]]; then
 fi
 
 JOBS="${JOBS:-$(nproc)}"
+
+if [[ -f /opt/mlp1-toolchain/umrk/mlp1-build-flags.env ]]; then
+    . /opt/mlp1-toolchain/umrk/mlp1-build-flags.env
+elif [[ -f /mlp1-toolchain/flags/mlp1-build-flags.env ]]; then
+    . /mlp1-toolchain/flags/mlp1-build-flags.env
+else
+    UMRK_MLP1_TARGET_SOC="rk3566"
+    UMRK_MLP1_TARGET_CPU="cortex-a55"
+    UMRK_MLP1_PROFILE_CFLAGS="-O2 -mcpu=cortex-a55 -mtune=cortex-a55 -ffunction-sections -fdata-sections -DNDEBUG"
+    UMRK_MLP1_PROFILE_CXXFLAGS="-O2 -mcpu=cortex-a55 -mtune=cortex-a55 -ffunction-sections -fdata-sections -DNDEBUG"
+    UMRK_MLP1_PROFILE_LDFLAGS="-Wl,--gc-sections"
+fi
 
 "$REPO_ROOT/fetch-retroarch.sh"
 
@@ -210,9 +224,9 @@ fi
 
 make distclean >/dev/null 2>&1 || true
 
-export CFLAGS="${CFLAGS:-} -O2 -mcpu=cortex-a55 -ffunction-sections -fdata-sections -D_GNU_SOURCE"
-export CXXFLAGS="${CXXFLAGS:-} -O2 -mcpu=cortex-a55 -ffunction-sections -fdata-sections -D_GNU_SOURCE"
-export LDFLAGS="${LDFLAGS:-} -Wl,--gc-sections"
+export CFLAGS="${CFLAGS:-} $UMRK_MLP1_PROFILE_CFLAGS -D_GNU_SOURCE"
+export CXXFLAGS="${CXXFLAGS:-} $UMRK_MLP1_PROFILE_CXXFLAGS -D_GNU_SOURCE"
+export LDFLAGS="${LDFLAGS:-} $UMRK_MLP1_PROFILE_LDFLAGS"
 export PKG_CONF_PATH="${PKG_CONF_PATH:-pkg-config}"
 export PKG_CONFIG_SYSROOT_DIR="${PKG_CONFIG_SYSROOT_DIR:-$SYSROOT}"
 export PKG_CONFIG_LIBDIR="${PKG_CONFIG_LIBDIR:-$SYSROOT/usr/lib/pkgconfig:$SYSROOT/usr/share/pkgconfig}"
@@ -302,6 +316,12 @@ mkdir -p "$(dirname "$BUILD_MANIFEST")"
     printf '  "retroarch_upstream_url": '; json_string "$RETROARCH_UPSTREAM_URL"; printf ",\n"
     printf '  "source_dir": '; json_string "$RETROARCH_SRC_DIR"; printf ",\n"
     printf '  "commit": '; json_string "$commit"; printf ",\n"
+    printf '  "target_soc": '; json_string "$UMRK_MLP1_TARGET_SOC"; printf ",\n"
+    printf '  "target_cpu": '; json_string "$UMRK_MLP1_TARGET_CPU"; printf ",\n"
+    printf '  "build_profile": '; json_string "$MLP1_BUILD_PROFILE"; printf ",\n"
+    printf '  "cflags": '; json_string "$CFLAGS"; printf ",\n"
+    printf '  "cxxflags": '; json_string "$CXXFLAGS"; printf ",\n"
+    printf '  "ldflags": '; json_string "$LDFLAGS"; printf ",\n"
     printf '  "configure_flags": '; json_array "${configure_flags[@]}"; printf ",\n"
     printf '  "patches_applied": '; json_array "${patches_applied[@]}"; printf ",\n"
     printf "  \"patch_controls\": {\n"
@@ -311,6 +331,7 @@ mkdir -p "$(dirname "$BUILD_MANIFEST")"
     printf "  },\n"
     printf '  "toolchain_image": '; json_string "$TOOLCHAIN_IMAGE"; printf ",\n"
     printf '  "output_binary": '; json_string "$OUTPUT_BIN_DIR/retroarch"; printf ",\n"
+    printf '  "exceptions": [],\n'
     printf '  "verified": %s,' "$verified"; printf "\n"
     printf '  "verification": '; json_string "$verification_status"; printf "\n"
     printf "}\n"
