@@ -1,0 +1,377 @@
+diff --git a/config.def.h b/config.def.h
+index a2f36dab48..b54c81d0b7 100644
+--- a/config.def.h
++++ b/config.def.h
+@@ -1651,6 +1651,7 @@
+ #else
+ #define DEFAULT_INPUT_BIND_HOLD 0
+ #endif
++#define DEFAULT_INPUT_BIND_CONTROLLER_ONLY false
+ #define DEFAULT_INPUT_POLL_TYPE_BEHAVIOR 2
+ #define DEFAULT_INPUT_HOTKEY_BLOCK_DELAY 5
+ #define DEFAULT_INPUT_HOTKEY_DEVICE_MERGE false
+diff --git a/configuration.c b/configuration.c
+index 0ec2ee4c68..3c4649b067 100644
+--- a/configuration.c
++++ b/configuration.c
+@@ -2173,6 +2173,7 @@ static struct config_bool_setting *populate_settings_bool(
+ #endif
+    SETTING_BOOL("keyboard_gamepad_enable",       &settings->bools.input_keyboard_gamepad_enable, true, DEFAULT_INPUT_KEYBOARD_GAMEPAD_ENABLE, false);
+    SETTING_BOOL("input_autodetect_enable",       &settings->bools.input_autodetect_enable, true, DEFAULT_INPUT_AUTODETECT_ENABLE, false);
++   SETTING_BOOL("input_bind_controller_only",    &settings->bools.input_bind_controller_only, true, DEFAULT_INPUT_BIND_CONTROLLER_ONLY, false);
+    SETTING_BOOL("input_turbo_enable",            &settings->bools.input_turbo_enable, true, DEFAULT_TURBO_ENABLE, false);
+    SETTING_BOOL("input_turbo_allow_dpad",        &settings->bools.input_turbo_allow_dpad, true, DEFAULT_TURBO_ALLOW_DPAD, false);
+    SETTING_BOOL("input_auto_mouse_grab",         &settings->bools.input_auto_mouse_grab, true, DEFAULT_INPUT_AUTO_MOUSE_GRAB, false);
+diff --git a/configuration.h b/configuration.h
+index 81b30e894a..0eb33ba902 100644
+--- a/configuration.h
++++ b/configuration.h
+@@ -728,6 +728,7 @@ typedef struct settings
+       bool input_overlay_mouse_dtap_to_drag;
+       bool input_descriptor_label_show;
+       bool input_descriptor_hide_unbound;
++      bool input_bind_controller_only;
+       bool input_all_users_control_menu;
+       bool input_menu_singleclick_playlists;
+       bool input_menu_allow_tabs_back;
+diff --git a/input/input_driver.c b/input/input_driver.c
+index beba85e1b2..9dcc2f1e0d 100644
+--- a/input/input_driver.c
++++ b/input/input_driver.c
+@@ -3855,6 +3855,50 @@ unsigned input_config_translate_str_to_bind_id(const char *str)
+    return RARCH_BIND_LIST_END;
+ }
+ 
++static void input_config_apply_controller_label(
++      const settings_t *settings,
++      const struct retro_keybind *bind,
++      struct retro_keybind *display_bind)
++{
++   unsigned i;
++   unsigned joy_idx;
++
++   if (!bind || !display_bind)
++      return;
++
++   *display_bind = *bind;
++
++   if (!settings || !settings->bools.input_bind_controller_only)
++      return;
++
++   joy_idx = settings->uints.input_joypad_index[0];
++   if (joy_idx >= MAX_USERS)
++      return;
++
++   for (i = 0; i < RARCH_BIND_LIST_END; i++)
++   {
++      const struct retro_keybind *candidate = &input_autoconf_binds[joy_idx][i];
++
++      if (     display_bind->joykey != NO_BTN
++            && display_bind->joykey == candidate->joykey
++            && string_is_empty(display_bind->joykey_label)
++            && !string_is_empty(candidate->joykey_label))
++         display_bind->joykey_label = candidate->joykey_label;
++
++      if (     display_bind->joyaxis != AXIS_NONE
++            && display_bind->joyaxis == candidate->joyaxis
++            && string_is_empty(display_bind->joyaxis_label)
++            && !string_is_empty(candidate->joyaxis_label))
++         display_bind->joyaxis_label = candidate->joyaxis_label;
++
++      if (     (display_bind->joykey == NO_BTN
++               || !string_is_empty(display_bind->joykey_label))
++            && (display_bind->joyaxis == AXIS_NONE
++               || !string_is_empty(display_bind->joyaxis_label)))
++         break;
++   }
++}
++
+ size_t input_config_get_bind_string(
+       void *settings_data,
+       char *s,
+@@ -3863,39 +3907,49 @@ size_t input_config_get_bind_string(
+       size_t len)
+ {
+    settings_t *settings                 = (settings_t*)settings_data;
++   struct retro_keybind labeled_bind;
++   const struct retro_keybind *display_bind = bind;
+    size_t _len                          = 0;
+    int delim                            = 0;
++   bool input_bind_controller_only      =
++      settings->bools.input_bind_controller_only;
+    bool  input_descriptor_label_show    =
+       settings->bools.input_descriptor_label_show;
+ 
+    *s                                 = '\0';
+ 
+-   if      (bind      && bind->joykey  != NO_BTN)
++   if (input_bind_controller_only && bind)
++   {
++      input_config_apply_controller_label(
++            settings, bind, &labeled_bind);
++      display_bind = &labeled_bind;
++   }
++
++   if      (display_bind && display_bind->joykey  != NO_BTN)
+       _len = input_config_get_bind_string_joykey(
+-            input_descriptor_label_show,
+-            s, "", bind, len);
+-   else if (bind      && bind->joyaxis != AXIS_NONE)
++            input_descriptor_label_show, s, "", display_bind, len);
++   else if (display_bind && display_bind->joyaxis != AXIS_NONE)
+       _len = input_config_get_bind_string_joyaxis(
+-            input_descriptor_label_show,
+-            s, "", bind, len);
++            input_descriptor_label_show, s, "", display_bind, len);
+    else if (auto_bind && auto_bind->joykey != NO_BTN)
+       _len = input_config_get_bind_string_joykey(
+             input_descriptor_label_show,
+-            s, "(Auto)", auto_bind, len);
++            s, input_bind_controller_only ? "" : "(Auto)", auto_bind, len);
+    else if (auto_bind && auto_bind->joyaxis != AXIS_NONE)
+       _len = input_config_get_bind_string_joyaxis(
+             input_descriptor_label_show,
+-            s, "(Auto)", auto_bind, len);
++            s, input_bind_controller_only ? "" : "(Auto)", auto_bind, len);
+ 
+    if (*s)
+       delim = 1;
+ 
+ #ifndef RARCH_CONSOLE
++   if (!input_bind_controller_only)
+    {
+       char key[64];
+       key[0] = '\0';
+ 
+-      input_keymaps_translate_rk_to_str(bind->key, key, sizeof(key));
++      input_keymaps_translate_rk_to_str(display_bind->key, key, sizeof(key));
+       if (     key[0] == 'n'
+             && key[1] == 'u'
+             && key[2] == 'l'
+@@ -3914,10 +3968,10 @@ size_t input_config_get_bind_string(
+    }
+ #endif
+ 
+-   if (bind->mbutton != NO_BTN)
++   if (!input_bind_controller_only && display_bind->mbutton != NO_BTN)
+    {
+       int tag = 0;
+-      switch (bind->mbutton)
++      switch (display_bind->mbutton)
+       {
+          case RETRO_DEVICE_ID_MOUSE_LEFT:
+             tag = MENU_ENUM_LABEL_VALUE_INPUT_MOUSE_LEFT;
+diff --git a/menu/menu_driver.c b/menu/menu_driver.c
+index a4b23c10ab..a81a3ce571 100644
+--- a/menu/menu_driver.c
++++ b/menu/menu_driver.c
+@@ -1484,6 +1484,7 @@ static int menu_input_key_bind_set_mode_common(struct menu_state *menu_st,
+             binds->output            = &input_config_binds[setting->index_offset][0]
+                   + input_config_bind_order[0];
+             binds->buffer            = *(binds->output);
++            binds->user              = setting->index_offset;
+ 
+             info.list                = menu_stack;
+             info.type                = MENU_SETTINGS_CUSTOM_BIND_KEYBOARD;
+@@ -1600,22 +1601,12 @@ static bool menu_input_key_bind_poll_find_hold_pad(
+ }
+ 
+ static bool menu_input_key_bind_poll_find_hold(
+-      unsigned max_users,
++      unsigned port,
+       struct menu_bind_state *new_state,
+       struct retro_keybind *output)
+ {
+-   if (new_state)
+-   {
+-      unsigned i;
+-
+-      for (i = 0; i < max_users; i++)
+-      {
+-         if (menu_input_key_bind_poll_find_hold_pad(new_state, output, i))
+-            return true;
+-      }
+-   }
+-
+-   return false;
++   return new_state && port < MAX_USERS
++      && menu_input_key_bind_poll_find_hold_pad(new_state, output, port);
+ }
+ 
+ static bool menu_input_key_bind_poll_find_trigger_pad(
+@@ -1729,24 +1720,14 @@ static bool menu_input_key_bind_poll_find_trigger_pad(
+ }
+ 
+ static bool menu_input_key_bind_poll_find_trigger(
+-      unsigned max_users,
++      unsigned port,
+       struct menu_bind_state *state,
+       struct menu_bind_state *new_state,
+       struct retro_keybind *output)
+ {
+-   if (state && new_state)
+-   {
+-      unsigned i;
+-
+-      for (i = 0; i < max_users; i++)
+-      {
+-         if (menu_input_key_bind_poll_find_trigger_pad(
+-                  state, new_state, output, i))
+-            return true;
+-      }
+-   }
+-
+-   return false;
++   return state && new_state && port < MAX_USERS
++      && menu_input_key_bind_poll_find_trigger_pad(
++            state, new_state, output, port);
+ }
+ 
+ 
+@@ -3387,7 +3368,8 @@ static void menu_input_key_bind_poll_bind_state(
+       unsigned joy_idx,
+       struct menu_bind_state *state,
+       bool timed_out,
+-      bool keyboard_mapping_blocked)
++      bool keyboard_mapping_blocked,
++      bool controller_only)
+ {
+    unsigned b;
+    rarch_joypad_info_t joypad_info;
+@@ -3406,7 +3388,7 @@ static void menu_input_key_bind_poll_bind_state(
+    joypad_info.joy_idx                  = joy_idx;
+    joypad_info.auto_binds               = input_autoconf_binds[joy_idx];
+ 
+-   if (current_input->input_state)
++   if (!controller_only && current_input->input_state)
+    {
+       /* Poll mouse (on the relevant port)
+        *
+@@ -4835,6 +4817,9 @@ bool menu_input_key_bind_set_mode(
+    binds->port                         = settings->uints.input_joypad_index[
+       index_offset];
+ 
++   if (binds->port >= MAX_USERS)
++      return false;
++
+    menu_input_key_bind_poll_bind_get_rested_axes(
+          joypad,
+          sec_joypad,
+@@ -4843,9 +4828,10 @@ bool menu_input_key_bind_set_mode(
+          input_st,
+          (*input_st->libretro_input_binds),
+          settings->floats.input_axis_threshold,
+-         settings->uints.input_joypad_index[binds->port],
++         binds->port,
+          binds, false,
+-         (input_st->flags & INP_FLAG_KB_MAPPING_BLOCKED) ? true : false);
++         (input_st->flags & INP_FLAG_KB_MAPPING_BLOCKED) ? true : false,
++         settings->bools.input_bind_controller_only);
+ 
+    current_usec                        = cpu_features_get_time_usec();
+ 
+@@ -4858,8 +4844,11 @@ bool menu_input_key_bind_set_mode(
+    binds->timer_timeout.timeout_end    = current_usec + input_bind_timeout_us;
+ 
+ #ifdef USE_CUSTOM_BIND_KEYBOARD_CB
+-   input_st->keyboard_press_cb         = menu_input_key_bind_custom_bind_keyboard_cb;
+-   input_st->keyboard_press_data       = menu;
++   if (!settings->bools.input_bind_controller_only)
++   {
++      input_st->keyboard_press_cb      = menu_input_key_bind_custom_bind_keyboard_cb;
++      input_st->keyboard_press_data    = menu;
++   }
+ #endif
+ 
+    /* While waiting for input, we have to block all hotkeys. */
+@@ -4890,10 +4879,13 @@ static bool menu_input_key_bind_iterate(
+    menu_input_t *menu_input       = &menu_st->input_state;
+    uint64_t input_bind_hold_us    = settings->uints.input_bind_hold * 1000000;
+    uint64_t input_bind_timeout_us = settings->uints.input_bind_timeout * 1000000;
++   const char *input_bind_press   = settings->bools.input_bind_controller_only
++      ? "Press controller button or trigger"
++      : msg_hash_to_str(MSG_INPUT_BIND_PRESS);
+ 
+    snprintf(bind->s, bind->len,
+          "%s..\n(%s %1.1f %s)\n \n%s\n \n",
+-         msg_hash_to_str(MSG_INPUT_BIND_PRESS),
++         input_bind_press,
+          msg_hash_to_str(MSG_INPUT_BIND_TIMEOUT),
+          ((float)_binds->timer_timeout.timeout_us / 1000000),
+          msg_hash_to_str(MENU_ENUM_LABEL_VALUE_SECONDS),
+@@ -4954,7 +4946,7 @@ static bool menu_input_key_bind_iterate(
+       bool complete                         = false;
+       struct menu_bind_state new_binds      = *_binds;
+       unsigned bind_index                   = _binds->begin - MENU_SETTINGS_BIND_BEGIN;
+-      const struct retro_keybind *old_binds = &input_config_binds[new_binds.port][bind_index];
++      const struct retro_keybind *old_binds = &input_config_binds[new_binds.user][bind_index];
+       unsigned old_key                      = old_binds->key;
+ 
+       input_st->flags                      &= ~INP_FLAG_KB_MAPPING_BLOCKED;
+@@ -4963,9 +4955,10 @@ static bool menu_input_key_bind_iterate(
+             input_st,
+             (*input_st->libretro_input_binds),
+             settings->floats.input_axis_threshold,
+-            settings->uints.input_joypad_index[new_binds.port],
++            new_binds.port,
+             &new_binds, timed_out,
+-            (input_st->flags & INP_FLAG_KB_MAPPING_BLOCKED) ? true : false);
++            (input_st->flags & INP_FLAG_KB_MAPPING_BLOCKED) ? true : false,
++            settings->bools.input_bind_controller_only);
+ 
+       /* Wait until keys and buttons are released */
+       if (input_st->flags & INP_FLAG_WAIT_INPUT_RELEASE)
+@@ -4973,14 +4966,14 @@ static bool menu_input_key_bind_iterate(
+          if (input_bind_hold_us)
+          {
+             if (!menu_input_key_bind_poll_find_hold(
+-                  settings->uints.input_max_users,
++                  new_binds.port,
+                   &new_binds, &(new_binds.buffer)))
+                input_st->flags &= ~INP_FLAG_WAIT_INPUT_RELEASE;
+          }
+          else
+          {
+             if (!menu_input_key_bind_poll_find_trigger(
+-                  settings->uints.input_max_users,
++                  new_binds.port,
+                   _binds, &new_binds, &(new_binds.buffer)))
+                input_st->flags &= ~INP_FLAG_WAIT_INPUT_RELEASE;
+          }
+@@ -4995,7 +4988,7 @@ static bool menu_input_key_bind_iterate(
+          else
+             snprintf(bind->s, bind->len,
+                   "%s..\n(%s %1.1f %s)\n \n--- %s ---\n \n",
+-                  msg_hash_to_str(MSG_INPUT_BIND_PRESS),
++                  input_bind_press,
+                   msg_hash_to_str(MSG_INPUT_BIND_TIMEOUT),
+                   ((float)_binds->timer_timeout.timeout_us / 1000000),
+                   msg_hash_to_str(MENU_ENUM_LABEL_VALUE_SECONDS),
+@@ -5009,7 +5002,7 @@ static bool menu_input_key_bind_iterate(
+          new_binds.buffer                       = *(new_binds.output);
+ 
+          if (menu_input_key_bind_poll_find_hold(
+-               settings->uints.input_max_users,
++               new_binds.port,
+                &new_binds, &new_binds.buffer))
+          {
+             char hold_label[NAME_MAX_LENGTH];
+@@ -5030,7 +5023,7 @@ static bool menu_input_key_bind_iterate(
+ 
+             snprintf(bind->s, bind->len,
+                   "%s..\n(%s %1.1f %s)\n \n%s\n   %s",
+-                  msg_hash_to_str(MSG_INPUT_BIND_PRESS),
++                  input_bind_press,
+                   msg_hash_to_str(MSG_INPUT_BIND_HOLD),
+                   ((float)new_binds.timer_hold.timeout_us / 1000000),
+                   msg_hash_to_str(MENU_ENUM_LABEL_VALUE_SECONDS),
+@@ -5051,7 +5044,7 @@ static bool menu_input_key_bind_iterate(
+       }
+       else if ((new_binds.skip && !_binds->skip)
+             || menu_input_key_bind_poll_find_trigger(
+-               settings->uints.input_max_users,
++               new_binds.port,
+                _binds, &new_binds, &(new_binds.buffer)))
+          complete = true;
+ 
+
