@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "bundle_id": "mlp1-glsl-initial",
+  "platform": "mlp1",
+  "policy_version": 2,
+  "qualification_report": "shader-sources/mlp1-device-qualification.json",
+  "recommendations": "shader-sources/mlp1-recommended.json",
+  "installed_size_limit_bytes": 50331648,
+  "path_limit_bytes": 240,
+  "allowed_extensions": [
+    ".glsl",
+    ".glslp",
+    ".md",
+    ".png",
+    ".txt"
+  ],
+  "presets": [
+    {
+      "path": "handheld/gba-color.glslp",
+      "license": "LicenseRef-Public-Domain",
+      "license_provenance": "Embedded public-domain notice in handheld/shaders/color/gba-color.glsl",
+      "license_evidence_path": "handheld/shaders/color/gba-color.glsl",
+      "license_evidence_text": "License: Public domain",
+      "qualification": "recommended",
+      "group": "handheld-color"
+    },
+    {
+      "path": "handheld/gbc-color.glslp",
+      "license": "LicenseRef-Public-Domain",
+      "license_provenance": "Embedded public-domain notice in handheld/shaders/color/gbc-color.glsl",
+      "license_evidence_path": "handheld/shaders/color/gbc-color.glsl",
+      "license_evidence_text": "License: Public domain",
+      "qualification": "recommended",
+      "group": "handheld-color"
+    },
+    {
+      "path": "interpolation/sharp-bilinear-simple.glslp",
+      "license": "LicenseRef-Public-Domain",
+      "license_provenance": "Embedded public-domain notice in interpolation/shaders/sharp-bilinear-simple.glsl",
+      "license_evidence_path": "interpolation/shaders/sharp-bilinear-simple.glsl",
+      "license_evidence_text": "License: Public domain",
+      "qualification": "recommended",
+      "group": "interpolation"
+    },
+    {
+      "path": "misc/image-adjustment.glslp",
+      "license": "LicenseRef-Public-Domain",
+      "license_provenance": "Embedded public-domain notice in misc/shaders/image-adjustment.glsl",
+      "license_evidence_path": "misc/shaders/image-adjustment.glsl",
+      "license_evidence_text": "License: Public domain",
+      "qualification": "loads",
+      "group": "color-adjustment"
+    },
+    {
+      "path": "scanlines/res-independent-scanlines.glslp",
+      "license": "LicenseRef-Public-Domain",
+      "license_provenance": "Embedded public-domain notice in scanlines/shaders/res-independent-scanlines.glsl",
+      "license_evidence_path": "scanlines/shaders/res-independent-scanlines.glsl",
+      "license_evidence_text": "license: public domain",
+      "qualification": "loads",
+      "group": "scanlines"
+    },
+    {
+      "path": "scanlines/scanline-fract.glslp",
+      "license": "LicenseRef-Public-Domain",
+      "license_provenance": "Embedded public-domain notice in scanlines/shaders/scanline-fract.glsl",
+      "license_evidence_path": "scanlines/shaders/scanline-fract.glsl",
+      "license_evidence_text": "license: public domain",
+      "qualification": "recommended",
+      "group": "scanlines"
+    },
+    {
+      "path": "scanlines/scanlines-sine-abs.glslp",
+      "license": "LicenseRef-Public-Domain",
+      "license_provenance": "Embedded public-domain notice in scanlines/shaders/scanlines-sine-abs.glsl",
+      "license_evidence_path": "scanlines/shaders/scanlines-sine-abs.glsl",
+      "license_evidence_text": "license: public domain",
+      "qualification": "loads",
+      "group": "scanlines"
+    },
+    {
+      "source": "pt-skywalker541",
+      "path": "PT_SkyWalker541.glslp",
+      "license": "MIT",
+      "license_provenance": "Repository-wide MIT license in SkyWalker541/PT-SkyWalker541 LICENSE",
+      "license_evidence_scope": "repository",
+      "license_evidence_path": "LICENSE",
+      "license_evidence_text": "MIT License",
+      "qualification": "recommended",
+      "group": "community-handheld"
+    },
+    {
+      "source": "sharp-shimmerless",
+      "path": "sharp-shimmerless.glslp",
+      "license": "CC0-1.0",
+      "license_provenance": "Repository-wide CC0 1.0 dedication in Woohyun-Kang/Sharp-Shimmerless-Shader LICENSE.txt",
+      "license_evidence_scope": "repository",
+      "license_evidence_path": "LICENSE.txt",
+      "license_evidence_text": "CC0 1.0 Universal",
+      "qualification": "recommended",
+      "group": "community-interpolation"
+    },
+    {
+      "path": "crt/crt-hyllian-fast.glslp",
+      "license": "MIT",
+      "license_provenance": "Embedded MIT license in crt/shaders/hyllian/crt-hyllian-fast.glsl",
+      "license_evidence_path": "crt/shaders/hyllian/crt-hyllian-fast.glsl",
+      "license_evidence_text": "Permission is hereby granted, free of charge",
+      "qualification": "recommended",
+      "group": "crt-finalist"
+    },
+    {
+      "path": "crt/crt-lottes-fast.glslp",
+      "license": "LicenseRef-Public-Domain",
+      "license_provenance": "Embedded public-domain notice in crt/shaders/crt-lottes-fast.glsl",
+      "license_evidence_path": "crt/shaders/crt-lottes-fast.glsl",
+      "license_evidence_text": "[CRTS] PUBLIC DOMAIN CRT-STYLED SCALAR",
+      "qualification": "loads",
+      "group": "crt-advanced",
+      "recommendation_status": "excluded-performance",
+      "recommendation_reason": "Loads safely but measured 34.017 FPS on the lightweight CC0 fixture at 60 Hz."
+    }
+  ]
+}

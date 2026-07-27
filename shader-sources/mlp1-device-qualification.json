@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "qualification_id": "mlp1-expansion-2026-07-27",
+  "qualified_at": "2026-07-27",
+  "platform": "mlp1",
+  "device": {
+    "model": "Miniloong Pocket 1",
+    "firmware": "Buildroot 2021.11 (linux-5.10-gen-rkr8-245-g477c2fb590-dirty)",
+    "native_display_mode": "720x960",
+    "gpu": "Mali-G52",
+    "graphics_api": "OpenGL ES 3.2"
+  },
+  "retroarch_build": {
+    "version": "v1.22.2",
+    "commit": "69a4f0ea1e8aaf442ae4858f2e7f2b31a1776576",
+    "build_profile": "release"
+  },
+  "shader_source": {
+    "url": "https://github.com/libretro/glsl-shaders.git",
+    "commit": "2b2c5ee3fd8e1a3884e20ed424fd9bfbc51cbb3d",
+    "tree": "75d2a0d9e072b912f3479587bb1b4bcd1b55d510"
+  },
+  "shader_sources": [
+    {
+      "id": "libretro-glsl-shaders",
+      "url": "https://github.com/libretro/glsl-shaders.git",
+      "commit": "2b2c5ee3fd8e1a3884e20ed424fd9bfbc51cbb3d",
+      "tree": "75d2a0d9e072b912f3479587bb1b4bcd1b55d510",
+      "commit_epoch": 1780511317
+    },
+    {
+      "id": "pt-skywalker541",
+      "url": "https://github.com/SkyWalker541/PT-SkyWalker541.git",
+      "commit": "0e6ac059afe2fd5823b68385b8865bda5f0640e2",
+      "tree": "2b9582952b923939839448fa451962b793617e53",
+      "commit_epoch": 1783175433
+    },
+    {
+      "id": "sharp-shimmerless",
+      "url": "https://github.com/Woohyun-Kang/Sharp-Shimmerless-Shader.git",
+      "commit": "2a74e7af599335c2ce5e493f823a757925c80db3",
+      "tree": "93bb1abe5b904dadb2259152a2356ba228de6c9e",
+      "commit_epoch": 1732469781
+    }
+  ],
+  "runs": [
+    {
+      "content_class": "committed CC0 128x128 PICO-8 color-grid fixture",
+      "core": "fake08",
+      "passes_per_preset": 2,
+      "evidence_directory": "output/mlp1/shader-smoke/20260726-142351"
+    },
+    {
+      "content_class": "device-provided 240x160 GBA content, used read-only in place",
+      "core": "mgba",
+      "passes_per_preset": 1,
+      "evidence_directory": "output/mlp1/shader-smoke/20260726-142949"
+    },
+    {
+      "content_class": "committed CC0 color/gray/checkerboard/grid visual fixture",
+      "core": "fake08",
+      "passes_per_preset": 1,
+      "preset_count": 11,
+      "evidence_directory": "output/mlp1/shader-smoke/20260726-201558"
+    },
+    {
+      "content_class": "isolated Fugazi-style global automatic preset apply/preserve/clear regression",
+      "core": "fake08",
+      "passes_per_preset": 1,
+      "preset_count": 11,
+      "evidence_directory": "output/mlp1/shader-smoke/20260726-203219"
+    },
+    {
+      "content_class": "multi-source expansion on committed CC0 color/gray/checkerboard/grid visual fixture",
+      "core": "fake08",
+      "passes_per_preset": 2,
+      "preset_count": 15,
+      "evidence_directory": "output/mlp1/shader-smoke/20260727-001151"
+    },
+    {
+      "content_class": "final nine-recommendation bundle on committed CC0 color/gray/checkerboard/grid visual fixture",
+      "core": "fake08",
+      "passes_per_preset": 2,
+      "preset_count": 20,
+      "evidence_directory": "output/mlp1/shader-smoke/20260727-004957"
+    }
+  ],
+  "mandatory_checks": {
+    "set_shader_accepted": "pass",
+    "glsl_compile_and_link": "pass",
+    "process_liveness": "pass",
+    "non_black_gpu_screenshot": "pass",
+    "menu_open_and_close": "pass",
+    "shader_clear_and_reapply": "pass",
+    "save_and_load_state": "pass",
+    "clean_quit": "pass",
+    "second_launch": "pass",
+    "fugazi_global_apply_preserve_clear": "pass"
+  },
+  "presets": [
+    {
+      "path": "leaf-bundled/community/pt-skywalker541/PT_SkyWalker541.glslp",
+      "qualification": "recommended"
+    },
+    {
+      "path": "leaf-bundled/community/sharp-shimmerless/sharp-shimmerless.glslp",
+      "qualification": "recommended"
+    },
+    {
+      "path": "leaf-bundled/crt/crt-hyllian-fast.glslp",
+      "qualification": "recommended"
+    },
+    {
+      "path": "leaf-bundled/crt/crt-lottes-fast.glslp",
+      "qualification": "loads"
+    },
+    {
+      "path": "leaf-bundled/handheld/gba-color.glslp",
+      "qualification": "recommended"
+    },
+    {
+      "path": "leaf-bundled/handheld/gbc-color.glslp",
+      "qualification": "recommended"
+    },
+    {
+      "path": "leaf-bundled/interpolation/sharp-bilinear-simple.glslp",
+      "qualification": "recommended"
+    },
+    {
+      "path": "leaf-bundled/misc/image-adjustment.glslp",
+      "qualification": "loads"
+    },
+    {
+      "path": "leaf-bundled/scanlines/res-independent-scanlines.glslp",
+      "qualification": "loads"
+    },
+    {
+      "path": "leaf-bundled/scanlines/scanline-fract.glslp",
+      "qualification": "recommended"
+    },
+    {
+      "path": "leaf-bundled/scanlines/scanlines-sine-abs.glslp",
+      "qualification": "loads"
+    }
+  ],
+  "recommended_performance": {
+    "status": "complete",
+    "metadata": "shader-sources/mlp1-recommended.json",
+    "note": "Nine presets meet the 59 FPS gate across their applicable 60/120 Hz matrix. mGBA at 120Hz with BFI is excluded because the no-shader control fails. CRT Lite is BFI-off only after its PS1 120Hz BFI case measured 50.282 FPS. CRT Lottes Fast remains advanced-only after measuring 34.017 FPS at 60Hz."
+  }
+}

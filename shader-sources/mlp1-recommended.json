@@ -1,0 +1,409 @@
+{
+  "schema_version": 1,
+  "qualification_id": "mlp1-recommended-expansion-2026-07-27",
+  "qualified_at": "2026-07-27",
+  "platform": "mlp1",
+  "device": {
+    "model": "Miniloong Pocket 1",
+    "firmware": "Buildroot 2021.11 (linux-5.10-gen-rkr8-245-g477c2fb590-dirty)",
+    "display_modes": [
+      "720x960@60.038Hz",
+      "720x960@119.999Hz"
+    ],
+    "gpu": "Mali-G52",
+    "graphics_api": "OpenGL ES 3.2"
+  },
+  "retroarch_build": {
+    "version": "v1.22.2",
+    "commit": "69a4f0ea1e8aaf442ae4858f2e7f2b31a1776576",
+    "build_profile": "release",
+    "binary_sha256": "6af9c88c4e9ab83b2962d283a000a4edcf8fdf5a55364d4e4ae1950c41504aff"
+  },
+  "shader_source": {
+    "url": "https://github.com/libretro/glsl-shaders.git",
+    "commit": "2b2c5ee3fd8e1a3884e20ed424fd9bfbc51cbb3d",
+    "tree": "75d2a0d9e072b912f3479587bb1b4bcd1b55d510"
+  },
+  "shader_sources": [
+    {
+      "id": "libretro-glsl-shaders",
+      "url": "https://github.com/libretro/glsl-shaders.git",
+      "commit": "2b2c5ee3fd8e1a3884e20ed424fd9bfbc51cbb3d",
+      "tree": "75d2a0d9e072b912f3479587bb1b4bcd1b55d510",
+      "commit_epoch": 1780511317
+    },
+    {
+      "id": "pt-skywalker541",
+      "url": "https://github.com/SkyWalker541/PT-SkyWalker541.git",
+      "commit": "0e6ac059afe2fd5823b68385b8865bda5f0640e2",
+      "tree": "2b9582952b923939839448fa451962b793617e53",
+      "commit_epoch": 1783175433
+    },
+    {
+      "id": "sharp-shimmerless",
+      "url": "https://github.com/Woohyun-Kang/Sharp-Shimmerless-Shader.git",
+      "commit": "2a74e7af599335c2ce5e493f823a757925c80db3",
+      "tree": "93bb1abe5b904dadb2259152a2356ba228de6c9e",
+      "commit_epoch": 1732469781
+    }
+  ],
+  "protocol": {
+    "warmup_seconds": 10,
+    "measurement_seconds": 60,
+    "sample_interval_seconds": 15,
+    "acceptance_average_fps": 59.0,
+    "content_classes": [
+      "160x144 handheld",
+      "240x160 handheld",
+      "240p 4:3 console",
+      "224-line console",
+      "high-resolution heavier core"
+    ],
+    "display_matrix": [
+      "60Hz BFI off",
+      "120Hz BFI off",
+      "120Hz BFI on where the core/content path is compatible"
+    ]
+  },
+  "controls": [
+    {
+      "case": "mGBA, 240x160 GBA, 120Hz BFI on, no shader",
+      "result": "incompatible",
+      "average_fps": 38.499,
+      "maximum_audio_underrun_pct": 27.053,
+      "note": "The no-shader control fails, so mGBA at 120Hz with BFI is excluded from shader qualification rather than attributed to GBA Color."
+    },
+    {
+      "case": "mGBA, 240x160 GBA, 120Hz BFI on, Sharp Pixels",
+      "result": "incompatible",
+      "average_fps": 35.467,
+      "maximum_audio_underrun_pct": 46.526,
+      "note": "An unrelated lightweight shader reproduces the mGBA BFI failure."
+    },
+    {
+      "case": "PICO-8 CC0 fixture, 60Hz BFI off, CRT Lottes Fast",
+      "result": "excluded",
+      "average_fps": 34.017,
+      "dropped_frames_during_sample_window": 1029,
+      "note": "CRT Lottes Fast loads safely but is too expensive for MLP1, so it remains advanced-only."
+    },
+    {
+      "case": "PCSX-ReARMed, PS1, 120Hz BFI on, CRT Hyllian Fast",
+      "result": "incompatible",
+      "average_fps": 50.282,
+      "maximum_audio_underrun_pct": 6.352,
+      "note": "CRT Lite is recommended only with BFI off; it sustains full speed in its four 60/120Hz non-BFI cases."
+    }
+  ],
+  "presets": [
+    {
+      "path": "leaf-recommended/sharp-pixels.glslp",
+      "display_name": "Sharp Pixels",
+      "description": "Keeps pixel art crisp at integer and non-integer scaling without adding a CRT effect.",
+      "reference": "leaf-bundled/interpolation/sharp-bilinear-simple.glslp",
+      "parameters": {},
+      "intended_systems": [
+        "GB",
+        "GBC",
+        "GBA",
+        "FC",
+        "SFC",
+        "MD",
+        "PCE",
+        "PS"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 6,
+        "minimum_average_fps": 59.891,
+        "maximum_frame_time_p95_ms": 21.337,
+        "maximum_dropped_frames_during_sample_window": 58,
+        "maximum_audio_underrun_pct": 1.057
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture plus handheld, NES, SNES, and PS1 captures"
+      },
+      "constraints": [
+        "This is a scaling filter, not a CRT simulation.",
+        "120Hz cadence counters can report periodic drops for nominal 59.94/60fps content."
+      ]
+    },
+    {
+      "path": "leaf-recommended/subtle-scanlines.glslp",
+      "display_name": "Subtle Scanlines",
+      "description": "Adds lightweight scanlines with reduced darkness for 8-bit, 16-bit, and PlayStation-era games.",
+      "reference": "leaf-bundled/scanlines/scanline-fract.glslp",
+      "parameters": {
+        "BRIGHTBOOST": "1.1",
+        "DARKNESS": "0.25",
+        "THICKNESS": "1.0"
+      },
+      "intended_systems": [
+        "FC",
+        "SFC",
+        "MD",
+        "PCE",
+        "PS"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 5,
+        "minimum_average_fps": 59.68,
+        "maximum_frame_time_p95_ms": 20.586,
+        "maximum_dropped_frames_during_sample_window": 65,
+        "maximum_audio_underrun_pct": 0.859
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture plus NES, SNES, and PS1 captures"
+      },
+      "constraints": [
+        "Best at integer or near-integer scaling; the upstream shader can look uneven at arbitrary scales.",
+        "Scanlines reduce brightness, especially when combined with BFI."
+      ]
+    },
+    {
+      "path": "leaf-recommended/gba-color.glslp",
+      "display_name": "GBA Color",
+      "description": "Tames colors authored for the original Game Boy Advance LCD.",
+      "reference": "leaf-bundled/handheld/gba-color.glslp",
+      "parameters": {},
+      "intended_systems": [
+        "GBA"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 3,
+        "minimum_average_fps": 59.869,
+        "maximum_frame_time_p95_ms": 20.594,
+        "maximum_dropped_frames_during_sample_window": 56,
+        "maximum_audio_underrun_pct": 0.392
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture and read-only GBA captures"
+      },
+      "constraints": [
+        "Use only for GBA content.",
+        "Do not combine with BFI when using mGBA: the no-shader mGBA control falls to 38.499 FPS at 120Hz with BFI."
+      ]
+    },
+    {
+      "path": "leaf-recommended/gbc-color.glslp",
+      "display_name": "GBC Color",
+      "description": "Approximates the softer color response of the Game Boy Color LCD.",
+      "reference": "leaf-bundled/handheld/gbc-color.glslp",
+      "parameters": {},
+      "intended_systems": [
+        "GBC"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 4,
+        "minimum_average_fps": 59.923,
+        "maximum_frame_time_p95_ms": 20.553,
+        "maximum_dropped_frames_during_sample_window": 73,
+        "maximum_audio_underrun_pct": 1.929
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture and read-only GBC captures"
+      },
+      "constraints": [
+        "Use only for Game Boy Color content.",
+        "BFI further reduces brightness."
+      ]
+    },
+    {
+      "path": "leaf-recommended/game-boy-lcd.glslp",
+      "display_name": "Game Boy LCD",
+      "description": "Adds a subdued Pocket-style backing texture, pixel grid, and edge shadows for original Game Boy games.",
+      "reference": "leaf-bundled/community/pt-skywalker541/PT_SkyWalker541.glslp",
+      "parameters": {
+        "PT_BACKGROUND_TINT": "1.0",
+        "PT_BASE_TRANSPARENCY_AMOUNT": "0.20",
+        "PT_BEZEL_SHADOW_STRENGTH": "0.30",
+        "PT_DARK_COLOR_FILTER": "0.0",
+        "PT_GAP_GRID_COLOR": "0.0",
+        "PT_GAP_GRID_COLOR_INTENSITY": "0.30",
+        "PT_GRID_WIDTH": "0.08",
+        "PT_PIXEL_EFFECT": "1.0",
+        "PT_PIXEL_MODE": "0.0",
+        "PT_SHADOW_OPACITY": "0.30",
+        "PT_SYSTEM": "1.0",
+        "PT_TINT_INTENSITY": "1.0",
+        "PT_WHITE_PIXEL_MIN_TRANSPARENCY": "0.20"
+      },
+      "intended_systems": [
+        "GB"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 5,
+        "minimum_average_fps": 59.249,
+        "maximum_frame_time_p95_ms": 20.0,
+        "maximum_dropped_frames_during_sample_window": 75,
+        "maximum_audio_underrun_pct": 2.647
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture plus read-only handheld captures using PT SkyWalker541's low-power Grid mode"
+      },
+      "constraints": [
+        "Use only for original Game Boy content.",
+        "The texture and grid intentionally soften bright flat colors.",
+        "120Hz BFI measured 59.249 FPS and further reduces brightness."
+      ]
+    },
+    {
+      "path": "leaf-recommended/game-boy-color-lcd.glslp",
+      "display_name": "Game Boy Color LCD",
+      "description": "Adds a Pocket-style backing texture and low-cost pixel grid tuned for Game Boy Color art.",
+      "reference": "leaf-bundled/community/pt-skywalker541/PT_SkyWalker541.glslp",
+      "parameters": {
+        "PT_BACKGROUND_TINT": "1.0",
+        "PT_BASE_TRANSPARENCY_AMOUNT": "0.20",
+        "PT_BEZEL_SHADOW_STRENGTH": "0.30",
+        "PT_DARK_COLOR_FILTER": "10.0",
+        "PT_GAP_GRID_COLOR": "0.0",
+        "PT_GAP_GRID_COLOR_INTENSITY": "0.30",
+        "PT_GRID_WIDTH": "0.08",
+        "PT_PIXEL_EFFECT": "1.0",
+        "PT_PIXEL_MODE": "0.0",
+        "PT_SHADOW_OPACITY": "0.30",
+        "PT_SYSTEM": "2.0",
+        "PT_TINT_INTENSITY": "1.0",
+        "PT_WHITE_PIXEL_MIN_TRANSPARENCY": "0.20"
+      },
+      "intended_systems": [
+        "GBC"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 5,
+        "minimum_average_fps": 59.249,
+        "maximum_frame_time_p95_ms": 20.0,
+        "maximum_dropped_frames_during_sample_window": 75,
+        "maximum_audio_underrun_pct": 2.647
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture plus read-only GBC captures using PT SkyWalker541's low-power Grid mode"
+      },
+      "constraints": [
+        "Use only for Game Boy Color content.",
+        "This is a stronger display simulation than the simpler GBC Color preset.",
+        "120Hz BFI measured 59.249 FPS and further reduces brightness."
+      ]
+    },
+    {
+      "path": "leaf-recommended/game-boy-advance-lcd.glslp",
+      "display_name": "Game Boy Advance LCD",
+      "description": "Adds a gray backing texture, low-cost pixel grid, and transparency response tuned for the original GBA screen.",
+      "reference": "leaf-bundled/community/pt-skywalker541/PT_SkyWalker541.glslp",
+      "parameters": {
+        "PT_BACKGROUND_TINT": "2.0",
+        "PT_BASE_TRANSPARENCY_AMOUNT": "0.25",
+        "PT_BEZEL_SHADOW_STRENGTH": "0.30",
+        "PT_DARK_COLOR_FILTER": "0.0",
+        "PT_GAP_GRID_COLOR": "0.0",
+        "PT_GAP_GRID_COLOR_INTENSITY": "0.30",
+        "PT_GRID_WIDTH": "0.08",
+        "PT_PIXEL_EFFECT": "1.0",
+        "PT_PIXEL_MODE": "0.0",
+        "PT_SHADOW_OPACITY": "0.20",
+        "PT_SYSTEM": "4.0",
+        "PT_TINT_INTENSITY": "1.0",
+        "PT_WHITE_PIXEL_MIN_TRANSPARENCY": "0.55"
+      },
+      "intended_systems": [
+        "GBA"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 5,
+        "minimum_average_fps": 59.249,
+        "maximum_frame_time_p95_ms": 20.0,
+        "maximum_dropped_frames_during_sample_window": 75,
+        "maximum_audio_underrun_pct": 2.647
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture plus read-only GBA captures using PT SkyWalker541's low-power Grid mode"
+      },
+      "constraints": [
+        "Use only for original Game Boy Advance content.",
+        "Keep mGBA BFI off: the no-shader core path already falls below full speed at 120Hz with BFI."
+      ]
+    },
+    {
+      "path": "leaf-recommended/sharp-shimmerless.glslp",
+      "display_name": "Sharp Shimmerless",
+      "description": "Keeps rectangular pixels as sharp as possible at awkward non-integer scales while avoiding scrolling shimmer.",
+      "reference": "leaf-bundled/community/sharp-shimmerless/sharp-shimmerless.glslp",
+      "parameters": {},
+      "intended_systems": [
+        "GB",
+        "GBC",
+        "GBA",
+        "FC",
+        "SFC",
+        "MD",
+        "PCE",
+        "PS"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 6,
+        "minimum_average_fps": 59.78,
+        "maximum_frame_time_p95_ms": 21.121,
+        "maximum_dropped_frames_during_sample_window": 56,
+        "maximum_audio_underrun_pct": 1.461
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture plus GBC, NES, SNES, and PS1 captures"
+      },
+      "constraints": [
+        "Prefer this over Sharp Pixels when non-integer scrolling visibly shimmers.",
+        "It is a scaling filter, not a CRT or LCD simulation."
+      ]
+    },
+    {
+      "path": "leaf-recommended/crt-lite.glslp",
+      "display_name": "CRT Lite",
+      "description": "Adds a lightweight aperture mask and softened scanlines without curvature.",
+      "reference": "leaf-bundled/crt/crt-hyllian-fast.glslp",
+      "parameters": {
+        "BRIGHTBOOST": "1.4",
+        "MASK_INTENSITY": "0.3",
+        "SCANLINES": "0.5",
+        "SHARPNESS": "1.0"
+      },
+      "intended_systems": [
+        "FC",
+        "SFC",
+        "MD",
+        "PCE",
+        "PS"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 5,
+        "minimum_average_fps": 60.038,
+        "maximum_frame_time_p95_ms": 21.095,
+        "maximum_dropped_frames_during_sample_window": 54,
+        "maximum_audio_underrun_pct": 0.712
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture plus NES, SNES, and PS1 captures"
+      },
+      "constraints": [
+        "Keep BFI off: PS1 at 120Hz with BFI measured 50.282 FPS.",
+        "CRT effects reduce brightness; the preset uses a milder mask and scanline strength than upstream defaults."
+      ]
+    }
+  ]
+}

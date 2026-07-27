@@ -2,15 +2,16 @@ diff --git a/command.c b/command.c
 index 791d510547..b505bdb8f2 100644
 --- a/command.c
 +++ b/command.c
-@@ -60,6 +60,7 @@
+@@ -60,6 +60,8 @@
  #include "cheat_manager.h"
  #include "content.h"
  #include "dynamic.h"
 +#include "disk_control_interface.h"
++#include "gfx/video_driver.h"
  #include "list_special.h"
  #include "paths.h"
  #include "retroarch.h"
-@@ -737,6 +738,281 @@ bool command_show_osd_msg(command_t *cmd, const char* arg)
+@@ -737,6 +739,351 @@ bool command_show_osd_msg(command_t *cmd, const char* arg)
      return true;
  }
  
@@ -82,6 +83,76 @@ index 791d510547..b505bdb8f2 100644
 +      _len += strlcpy(reply + _len, "NO", sizeof(reply) - _len);
 +
 +   cmd->replier(cmd, reply, _len);
++   return true;
++}
++
++static int command_compare_frame_times(const void *left_ptr,
++      const void *right_ptr)
++{
++   retro_time_t left  = *(const retro_time_t*)left_ptr;
++   retro_time_t right = *(const retro_time_t*)right_ptr;
++
++   if (left < right)
++      return -1;
++   if (left > right)
++      return 1;
++   return 0;
++}
++
++bool command_get_perf_info(command_t *cmd, const char *arg)
++{
++   char reply[512]                = "";
++   double refresh_rate            = 0.0;
++   double deviation               = 0.0;
++   double frame_time_p95_ms       = 0.0;
++   unsigned samples               = 0;
++   unsigned i                     = 0;
++   bool video_ready               = false;
++   bool audio_ready               = false;
++   video_driver_state_t *video_st = video_state_get_ptr();
++   audio_statistics_t audio_stats;
++   retro_time_t sorted[MEASURE_FRAME_TIME_SAMPLES_COUNT];
++   (void)arg;
++
++   audio_stats.samples                    = 0;
++   audio_stats.average_buffer_saturation  = 0.0f;
++   audio_stats.std_deviation_percentage   = 0.0f;
++   audio_stats.close_to_underrun          = 0.0f;
++   audio_stats.close_to_blocking          = 0.0f;
++
++   if (video_st)
++      video_ready = video_monitor_fps_statistics(
++            &refresh_rate, &deviation, &samples);
++
++   if (video_ready)
++   {
++      for (i = 0; i < samples; i++)
++         sorted[i] = video_st->frame_time_samples[i];
++      qsort(sorted, samples, sizeof(sorted[0]), command_compare_frame_times);
++      frame_time_p95_ms =
++         (double)sorted[((samples - 1) * 95) / 100] / 1000.0;
++   }
++
++   audio_ready = audio_compute_buffer_statistics(&audio_stats);
++
++   snprintf(reply, sizeof(reply),
++         "GET_PERF_INFO ready=%u fps=%.3f frame_time_p95_ms=%.3f "
++         "deviation_pct=%.3f samples=%u frames=%llu dropped=%u "
++         "audio_ready=%u audio_samples=%u audio_underrun_pct=%.3f "
++         "audio_blocking_pct=%.3f",
++         video_ready ? 1 : 0,
++         refresh_rate,
++         frame_time_p95_ms,
++         deviation * 100.0,
++         samples,
++         video_st ? (unsigned long long)video_st->frame_count : 0,
++         video_st ? video_st->frame_drop_count : 0,
++         audio_ready ? 1 : 0,
++         audio_stats.samples,
++         audio_stats.close_to_underrun,
++         audio_stats.close_to_blocking);
++
++   cmd->replier(cmd, reply, strlen(reply));
 +   return true;
 +}
 +
@@ -296,7 +367,7 @@ diff --git a/command.h b/command.h
 index 6fd256541b..d005f79753 100644
 --- a/command.h
 +++ b/command.h
-@@ -425,7 +425,19 @@ struct cmd_action_map
+@@ -425,7 +425,20 @@ struct cmd_action_map
  bool command_version(command_t *cmd, const char* arg);
  bool command_get_status(command_t *cmd, const char* arg);
  bool command_get_config_param(command_t *cmd, const char* arg);
@@ -307,6 +378,7 @@ index 6fd256541b..d005f79753 100644
 +bool command_audio_reinit(command_t *cmd, const char* arg);
 +bool command_open_menu(command_t *cmd, const char* arg);
 +bool command_get_info(command_t *cmd, const char* arg);
++bool command_get_perf_info(command_t *cmd, const char* arg);
 +bool command_get_disk_count(command_t *cmd, const char *arg);
 +bool command_get_disk_slot(command_t *cmd, const char *arg);
 +bool command_set_disk_slot(command_t *cmd, const char *arg);
@@ -324,7 +396,7 @@ index 6fd256541b..d005f79753 100644
     { "SHOW_MSG",         command_show_osd_msg,     "No argument" },
  #if defined(HAVE_CHEEVOS)
     /* These functions use achievement addresses and only work if a game with achievements is
-@@ -456,6 +467,18 @@ static const struct cmd_action_map action_map[] = {
+@@ -456,6 +468,19 @@ static const struct cmd_action_map action_map[] = {
     { "READ_CORE_MEMORY", command_read_memory,      "<address> <number of bytes>" },
     { "WRITE_CORE_MEMORY",command_write_memory,     "<address> <byte1> <byte2> ..." },
  
@@ -333,6 +405,7 @@ index 6fd256541b..d005f79753 100644
 +   { "AUDIO_REINIT",     command_audio_reinit,     "No argument" },
 +   { "OPEN_MENU",        command_open_menu,        "No argument" },
 +   { "GET_INFO",         command_get_info,         "No argument" },
++   { "GET_PERF_INFO",    command_get_perf_info,    "No argument" },
 +   { "GET_DISK_COUNT",   command_get_disk_count,   "No argument" },
 +   { "GET_DISK_SLOT",    command_get_disk_slot,    "No argument" },
 +   { "SET_DISK_SLOT",    command_set_disk_slot,    "<disk number>" },

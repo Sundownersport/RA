@@ -53,9 +53,80 @@ make adb-stage-pak-mlp1
 Preferred device staging is from `../Leaf`:
 
 ```sh
-make -C ../Leaf stage-retroarch DEVICE=mlp1      # binary + cores + info
+make -C ../Leaf stage-retroarch DEVICE=mlp1      # binary + cores + info + shaders
 make -C ../Leaf stage-app APP=retroarch-builds DEVICE=mlp1
 ```
+
+Build and validate the pinned MLP1 GLSL shader bundle:
+
+```sh
+make test-shaders-mlp1
+make shaders-mlp1
+make validate-shaders-mlp1
+ADB_SERIAL=<serial> make smoke-shaders-mlp1
+```
+
+The device harness defaults to the committed CC0 PICO-8 fixture. It also runs
+an isolated Fugazi-style global automatic-preset regression covering apply,
+clear, and byte-for-byte preservation while browsing bundled presets, without
+touching the user's real `.umrk` state. To add a read-only pass against content
+already present on a device, select its installed core and absolute device
+path; the harness never copies, changes, or deletes the source content:
+
+```sh
+SHADER_TEST_CORE_ID=mgba \
+SHADER_TEST_REMOTE_CONTENT='/media/sdcard1/Roms/GBA/example.zip' \
+SHADER_SMOKE_REPEAT_COUNT=1 \
+ADB_SERIAL=<serial> make smoke-shaders-mlp1
+```
+
+Run a 60-second recommendation measurement for one staged preset and one
+read-only device content case:
+
+```sh
+SHADER_PERF_PRESET='leaf-bundled/interpolation/sharp-bilinear-simple.glslp' \
+SHADER_PERF_CORE_ID=snes9x \
+SHADER_PERF_REMOTE_CONTENT='/media/sdcard1/Roms/SFC/example.zip' \
+SHADER_PERF_CONTENT_CLASS='224-line console' \
+ADB_SERIAL=<serial> make performance-shader-mlp1
+```
+
+After a fixed 10-second warm-up, the performance harness queries RetroArch's
+MLP1 `GET_PERF_INFO` command every 15 seconds for a 60-second measurement,
+records FPS/frame-time/drop/audio values and temperatures, then captures the
+on-screen statistics overlay once as visual evidence. Device-provided content
+is left untouched. Set `SHADER_PERF_REFRESH_HZ=120` and
+`SHADER_PERF_BFI=0|1` for the 120 Hz matrix; the harness restores the original
+panel refresh when it exits.
+
+Run the complete 18-case recommendation matrix (four candidates, all required
+content classes, a heavier core, and 60/120 Hz with BFI coverage where the
+core/display combination is compatible):
+
+```sh
+ADB_SERIAL=<serial> make qualify-shader-recommendations-mlp1
+```
+
+Run the separate 14-case real-game gate for PT SkyWalker541, Sharp Shimmerless,
+and the lightweight CRT finalist:
+
+```sh
+ADB_SERIAL=<serial> make qualify-shader-expansion-mlp1
+```
+
+The bundle is generated under `output/mlp1/shaders/` from exact, pinned commits
+of the original upstream repositories. Its manifest records every file hash,
+dependency, upstream source path, license evidence, and qualification state.
+Nine visually reviewed, performance-tested thin presets are generated under
+`leaf-recommended/`; they reference the standard tree without duplicating
+shader sources. New advanced candidates stay outside that folder until they
+pass the complete MLP1 game-content visual and performance gates. No shader is
+enabled by default.
+
+The current recommendation gate excludes mGBA at 120 Hz with BFI because a
+no-shader control also fails that combination. GBA Color remains qualified at
+60 Hz and at 120 Hz with BFI off; this limitation is recorded in the generated
+recommendation metadata.
 
 Outputs:
 
@@ -63,6 +134,7 @@ Outputs:
 - app bundle: `output/macos/RetroArch.app`
 - MLP1 binary: `output/mlp1/bin/retroarch`
 - MLP1 build manifest: `output/mlp1/build-manifest.json`
+- MLP1 GLSL shader bundle: `output/mlp1/shaders/`
 - Jawaka pak: `build/package/RetroArch.pak` (staged under `Apps/shared/`)
 
 ## How it works

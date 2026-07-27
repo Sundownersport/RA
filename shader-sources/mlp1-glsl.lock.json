@@ -1,0 +1,40 @@
+{
+  "schema_version": 2,
+  "sources": [
+    {
+      "id": "libretro-glsl-shaders",
+      "source": "https://github.com/libretro/glsl-shaders.git",
+      "commit": "2b2c5ee3fd8e1a3884e20ed424fd9bfbc51cbb3d",
+      "tree": "75d2a0d9e072b912f3479587bb1b4bcd1b55d510",
+      "commit_epoch": 1780511317,
+      "checkout": "workdir/src/glsl-shaders",
+      "source_root": ".",
+      "output_root": "leaf-bundled"
+    },
+    {
+      "id": "pt-skywalker541",
+      "source": "https://github.com/SkyWalker541/PT-SkyWalker541.git",
+      "commit": "0e6ac059afe2fd5823b68385b8865bda5f0640e2",
+      "tree": "2b9582952b923939839448fa451962b793617e53",
+      "commit_epoch": 1783175433,
+      "checkout": "workdir/src/pt-skywalker541",
+      "source_root": "Standard RetroArch/shaders_glsl/handheld",
+      "output_root": "leaf-bundled/community/pt-skywalker541",
+      "license_path": "LICENSE",
+      "license_evidence_text": "MIT License"
+    },
+    {
+      "id": "sharp-shimmerless",
+      "source": "https://github.com/Woohyun-Kang/Sharp-Shimmerless-Shader.git",
+      "commit": "2a74e7af599335c2ce5e493f823a757925c80db3",
+      "tree": "93bb1abe5b904dadb2259152a2356ba228de6c9e",
+      "commit_epoch": 1732469781,
+      "checkout": "workdir/src/sharp-shimmerless",
+      "source_root": "shaders_glsl",
+      "output_root": "leaf-bundled/community/sharp-shimmerless",
+      "license_path": "LICENSE.txt",
+      "license_evidence_text": "CC0 1.0 Universal"
+    }
+  ],
+  "selection": "shader-sources/mlp1-glsl-selection.json"
+}
