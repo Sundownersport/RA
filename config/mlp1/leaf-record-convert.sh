@@ -18,7 +18,12 @@
 # and Eric A/B'd it against the default twoloop coder on dense Hard Corps audio
 # and could not tell them apart. Half the CPU on a handheld is worth having.
 #
-# usage: leaf-record-convert.sh <capture.mkv> [--delete-source]
+# Takes a single capture or a directory. jawakad passes the directory once, after
+# RetroArch exits, because one session can produce several clips and it should not
+# have to track which. Converting is idempotent -- an up-to-date .mp4 is skipped --
+# so re-running over the whole directory costs nothing.
+#
+# usage: leaf-record-convert.sh <capture.mkv | directory> [--delete-source]
 set -eu
 
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -36,11 +41,32 @@ DELETE_SOURCE=0
 [ "${2:-}" = "--delete-source" ] && DELETE_SOURCE=1
 
 [ -x "$FFMPEG" ] || die "no ffmpeg beside this script at $FFMPEG"
-[ -f "$SRC" ]    || die "no such capture: $SRC"
+
+# Directory mode: convert every capture that does not already have an up-to-date
+# .mp4, then stop. Runs each through this same script so there is one code path,
+# and keeps going if a single capture fails -- one corrupt file should not strand
+# the rest of the session's clips.
+if [ -d "$SRC" ]; then
+    rc=0
+    found=0
+    for capture in "$SRC"/*.mkv; do
+        [ -e "$capture" ] || break          # nothing matched; glob stayed literal
+        found=1
+        if [ "$DELETE_SOURCE" = "1" ]; then
+            "$0" "$capture" --delete-source || rc=1
+        else
+            "$0" "$capture" || rc=1
+        fi
+    done
+    [ "$found" = "1" ] || echo "leaf-record-convert: no captures in $SRC"
+    exit $rc
+fi
+
+[ -f "$SRC" ] || die "no such capture: $SRC"
 
 case "$SRC" in
     *.mkv) ;;
-    *) die "expected a .mkv capture, got: $SRC" ;;
+    *) die "expected a .mkv capture or a directory, got: $SRC" ;;
 esac
 
 DST=${SRC%.mkv}.mp4
