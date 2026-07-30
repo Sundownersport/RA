@@ -196,6 +196,10 @@ apply_named_patch() {
             patch_path="$REPO_ROOT/patches/mlp1/0003-controller-only-bindings-ui.patch"
             patch_label="mlp1/$(basename "$patch_path")"
             ;;
+        record-extension)
+            patch_path="$REPO_ROOT/patches/mlp1/0004-record-extension-from-format.patch"
+            patch_label="mlp1/$(basename "$patch_path")"
+            ;;
         "")
             return 0
             ;;
