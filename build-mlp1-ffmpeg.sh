@@ -66,7 +66,7 @@ make distclean >/dev/null 2>&1 || true
   --enable-gpl --enable-version3 \
   --enable-libdrm --enable-rkmpp \
   --enable-shared --disable-static \
-  --disable-programs --disable-doc --disable-htmlpages \
+  --disable-ffplay --disable-ffprobe --disable-doc --disable-htmlpages \
   --disable-manpages --disable-txtpages \
   --disable-sdl2 --disable-alsa \
   --disable-debug \
@@ -74,8 +74,14 @@ make distclean >/dev/null 2>&1 || true
   || { echo "--- configure FAILED ---"; tail -40 /tmp/ff_configure.log; \
        echo "--- config.log tail ---"; tail -30 ffbuild/config.log 2>/dev/null; exit 1; }
 
-# config.h writes "#define CONFIG_RKMPP 1"; config.mak writes "CONFIG_RKMPP=yes".
-# Matching only one form silently aborts a perfectly good configure.
+# The ffmpeg CLI is built on purpose (note --disable-programs is NOT passed; only
+# ffplay and ffprobe are turned off). Capture has to stay cheap enough to run
+# underneath a game, so it records FLAC in Matroska -- real-time AAC breaks audio
+# output on FCEUmm. Turning that into something Discord will play inline is a
+# post-process pass that runs after RetroArch exits, and this binary is what runs
+# it: `-c:v copy -c:a aac` stream-copies the video, so there is no re-encode and
+# no quality loss. ffplay needs SDL, which is disabled anyway; ffprobe is left out
+# to keep the release small, since nothing in the pass needs it.
 for want in RKMPP LIBDRM; do
     grep -qE "^#define CONFIG_$want 1\$" config.h \
       || { echo "CONFIG_$want did not enable; refusing to build a useless ffmpeg"; \
@@ -123,6 +129,32 @@ for real in "$OUT"/lib/lib*.so.*.*; do
     cp "$real" "$FLAT/$soname"
 done
 cp -L "$SYSROOT"/usr/lib/librockchip_mpp.so.1 "$FLAT/" 2>/dev/null || true
+
+# The ffmpeg CLI ships beside RetroArch in bin/, with the libraries in
+# lib/ffmpeg/, so it needs the same runpath RetroArch gets. Setting it via LDFLAGS
+# does not survive: make eats the $O (linking as RIGIN/...) and then the shell
+# eats $ORIGIN (linking as /...), and both forms link happily and report success.
+# patchelf after the fact is the only reliable way, and the read-back is what
+# catches it when it silently does not take.
+FFBIN="$OUT/bin/ffmpeg"
+[ -x "$FFBIN" ] || { echo "ffmpeg CLI did not build -- check --disable-programs is absent"; exit 1; }
+patchelf --set-rpath '$ORIGIN/../lib/ffmpeg' "$FFBIN"
+got=$(patchelf --print-rpath "$FFBIN")
+[ "$got" = '$ORIGIN/../lib/ffmpeg' ] || { echo "ffmpeg runpath did not take: '$got'"; exit 1; }
+
+# The pass needs exactly two things: an AAC encoder and the MP4 muxer. Both are
+# easy to lose to a configure change and would only fail on device at conversion
+# time. Assert against the generated config header rather than grepping the
+# binary -- a strings grep already produced a FALSE NEGATIVE on the AAC encoder
+# once during this work, which sent the capture preset to FLAC for the wrong
+# reason. FFmpeg 6.x puts component defines in config_components.h.
+CFGH=config_components.h; [ -f "$CFGH" ] || CFGH=config.h
+for want in AAC_ENCODER MP4_MUXER; do
+    grep -qE "^#define CONFIG_$want 1\$" "$CFGH" \
+      || { echo "CONFIG_$want is off; the post-process pass cannot produce a shareable MP4"; exit 1; }
+    echo "  CONFIG_$want enabled"
+done
+echo "--- ffmpeg CLI: $(du -h "$FFBIN" | cut -f1), runpath $got ---"
 
 # Every library gets $ORIGIN so it finds its siblings. RUNPATH, unlike the old
 # RPATH, is NOT consulted for a dependency's own dependencies -- so RetroArch's
