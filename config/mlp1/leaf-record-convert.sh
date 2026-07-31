@@ -87,18 +87,78 @@ probe_seconds() {
 # .mp4, then stop. Runs each through this same script so there is one code path,
 # and keeps going if a single capture fails -- one corrupt file should not strand
 # the rest of the session's clips.
+#
+# Only ONE of these may run at a time. jawakad dispatches on every exit to the
+# launcher and conversion runs detached for seconds to minutes, so exiting one game
+# and quickly finishing another starts a second copy over the same directory. Both
+# would see the same capture as unconverted -- the first has not renamed its output
+# yet -- and write the same .mp4.part, and on the split path one run's
+# "rm -f BASE-part*.mp4" deletes the other's parts mid-write. The result is a
+# corrupt file that still passes the non-empty check. A unique temp name is not
+# enough on its own, because the part filenames are a shared namespace.
+#
+# The lock lives in /tmp rather than beside the captures: it is tmpfs, so a reboot
+# during a conversion cannot strand it, and it keeps bookkeeping out of a folder
+# the user browses. A holder killed without a reboot is handled by the pid check.
+LOCK_DIR=/tmp/leaf-record-convert.lock
+
+acquire_lock() {
+    if mkdir "$LOCK_DIR" 2>/dev/null; then      # mkdir either creates or fails, atomically
+        echo $$ > "$LOCK_DIR/pid" 2>/dev/null || true
+        return 0
+    fi
+    holder=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+    if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
+        return 1                                 # a conversion really is running
+    fi
+    rm -rf "$LOCK_DIR"                           # stale: holder died without cleaning up
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+        echo $$ > "$LOCK_DIR/pid" 2>/dev/null || true
+        return 0
+    fi
+    return 1                                     # lost the race to take it over
+}
+
 if [ -d "$SRC" ]; then
+    if ! acquire_lock; then
+        echo "leaf-record-convert: another conversion is running, skipping"
+        exit 0
+    fi
+    trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
+
     rc=0
     found=0
     args=""
     [ "$SPLIT" = "1" ] && args="$args --split"
     [ "$DELETE_SOURCE" = "1" ] && args="$args --delete-source"
-    for capture in "$SRC"/*.mkv; do
-        [ -e "$capture" ] || break          # nothing matched; glob stayed literal
-        found=1
-        # shellcheck disable=SC2086  # $args is our own fixed flag list, not user input
-        "$0" "$capture" $args || rc=1
+
+    # Re-scan after each pass. A clip finished while we were busy would otherwise
+    # wait for the next game exit, and the run that would have picked it up was
+    # the one we just turned away at the lock. Bounded, so a capture that fails
+    # every time costs a few attempts rather than looping forever.
+    round=0
+    while [ "$round" -lt 3 ]; do
+        round=$((round + 1))
+        pending=0
+        for capture in "$SRC"/*.mkv; do
+            [ -e "$capture" ] || break       # nothing matched; glob stayed literal
+            found=1
+            base=${capture%.mkv}
+            # Skip what is already done, so a later round is cheap and only the
+            # genuinely new captures are handed to the converter again.
+            if [ -f "${base}.mp4" ] && [ "${base}.mp4" -nt "$capture" ]; then
+                continue
+            fi
+            if [ -f "${base}-part1.mp4" ] && [ "${base}-part1.mp4" -nt "$capture" ]; then
+                continue
+            fi
+            pending=1
+            # shellcheck disable=SC2086  # $args is our own fixed flag list, not user input
+            "$0" "$capture" $args || rc=1
+        done
+        [ "$pending" = "1" ] || break
     done
+
     [ "$found" = "1" ] || echo "leaf-record-convert: no captures in $SRC"
     exit $rc
 fi
