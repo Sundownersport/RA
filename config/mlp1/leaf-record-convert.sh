@@ -35,10 +35,21 @@ AAC_CODER=fast
 # Discord's free upload limit. Real gameplay costs ~34-35s per 10MB at the 2500k
 # capture preset (measured: a 71.7s Contra clip shipped 20.6MB), so anything past
 # about half a minute needs splitting to be shareable at all.
-SPLIT_LIMIT_BYTES=10485760      # 10 MB - the limit each part must come in under
-# ffmpeg's -fs stops writing once the limit is crossed, so a part can exceed this
-# by the last packet it was midway through. Half a megabyte is ample room for that.
-SPLIT_TARGET_BYTES=9961472      # 9.5 MB
+# DECIMAL megabytes, deliberately. "10 MB" is ambiguous -- 10 MiB is 10485760 and
+# 10 MB is 10000000 -- and sizing this in MiB is a real trap: parts came out at
+# 10018185 and 10009697 bytes, which pass a 10 MiB test and are still over
+# 10 million bytes. Finder called them "10 MB" while the device called them
+# "9.6 MB"; both were right, and the file was over the line either way. Since it is
+# not certain which Discord enforces, come in under the smaller reading.
+SPLIT_LIMIT_BYTES=10000000      # the limit each part must come in under
+# ffmpeg's -fs stops writing once the limit is crossed, and it does so at coarse
+# chunk boundaries rather than near the target: measured overshoot is 2.5-3.3%
+# (230-320KB), and targets of 9.7M and 9.96M both produced the identical
+# 10018185-byte file. 7% of headroom covers that with room to spare. If this ever
+# proves too tight the fallback catches it -- the script verifies the largest part
+# against SPLIT_LIMIT_BYTES and keeps a single file rather than ship parts that
+# are too big to post.
+SPLIT_TARGET_BYTES=9300000
 
 die() { echo "leaf-record-convert: $*" >&2; exit 1; }
 
