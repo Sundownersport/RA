@@ -186,6 +186,18 @@ if [ -f "${BASE}-part1.mp4" ] && [ "${BASE}-part1.mp4" -nt "$SRC" ]; then
     exit 0
 fi
 
+# Refuse to start if the card cannot hold the work. At peak this holds the .mkv,
+# the full .mp4 and every part at once -- roughly the source size twice over --
+# and the SD card is also where library.db, settings and save states live. Filling
+# it does not just cost the recording: writes start failing across Leaf, and a
+# dirty FAT32 at the next reboot can flip the whole card read-only. Declining is
+# cheap; the capture is still there to convert once there is room.
+src_kb=$(du -k "$SRC" 2>/dev/null | awk '{print $1; exit}')
+free_kb=$(df -k "$(dirname "$SRC")" 2>/dev/null | awk 'NR==2 {print $4; exit}')
+if [ -n "$src_kb" ] && [ -n "$free_kb" ] && [ "$free_kb" -lt $((src_kb * 2)) ]; then
+    die "not enough free space to convert $(basename "$SRC") (need ~$((src_kb * 2 / 1024))MB, have $((free_kb / 1024))MB)"
+fi
+
 # Write to a temp name and rename only on success. MP4 writes its index at
 # finalisation, so a conversion interrupted midway leaves a file that looks
 # complete to a file browser but will not play. The rename is what makes the
@@ -236,17 +248,29 @@ if [ "$SPLIT" = "1" ] && [ "$(wc -c < "$TMP")" -gt "$SPLIT_LIMIT_BYTES" ]; then
         # limit is crossed, which holds whatever the content does.
         rm -f "${BASE}"-part*.mp4
         offset=0
+
         n=1
         ok=1
         while :; do
+            # Termination is tested HERE, before writing anything, so that a
+            # failure below is unambiguously a failure. The previous shape ran
+            # ffmpeg first and treated "it produced nothing" as "we reached the
+            # end" for every part after the first -- so a card that filled up, or
+            # an OOM kill, silently ended the split, declared success, and (with
+            # --delete-source) deleted the .mkv. Half a recording, exit 0.
+            if [ "$(awk -v o="$offset" -v d="$duration" 'BEGIN{print (o >= d - 0.5)}')" = "1" ]; then
+                break
+            fi
+
             part="${BASE}-part${n}.mp4"
             if ! "$FFMPEG" -v error -y -ss "$offset" -i "$TMP" -c copy \
                     -fs "$SPLIT_TARGET_BYTES" -movflags +faststart \
                     -f mp4 "$part" 2>/dev/null || [ ! -s "$part" ]; then
                 rm -f "$part"
-                [ "$n" = "1" ] && ok=0      # produced nothing at all
+                ok=0
                 break
             fi
+
             part_seconds=$(probe_seconds "$part")
             # A part with no readable or zero duration cannot advance the offset,
             # and looping on it would write parts until the card filled.
@@ -255,14 +279,41 @@ if [ "$SPLIT" = "1" ] && [ "$(wc -c < "$TMP")" -gt "$SPLIT_LIMIT_BYTES" ]; then
                 ok=0
                 break
             fi
+
             offset=$(awk -v o="$offset" -v s="$part_seconds" 'BEGIN{printf "%.3f", o + s}')
-            [ "$(awk -v o="$offset" -v d="$duration" 'BEGIN{print (o >= d - 0.5)}')" = "1" ] && break
             n=$((n + 1))
             if [ "$n" -gt 64 ]; then        # backstop; no real capture needs this
                 ok=0
                 break
             fi
         done
+
+        # Do the parts actually contain the whole recording? Checked in BYTES on
+        # purpose. The obvious check -- sum the part durations and compare against
+        # the source -- is worthless here, because the offset advances by exactly
+        # the duration each part reports, so that sum always equals the offset and
+        # the test can never fail. Bytes come from the filesystem instead, so they
+        # are independent of the arithmetic driving the loop.
+        #
+        # This catches the silent gap: `-ss` before `-i` seeks BACKWARD to a
+        # keyframe, so a part starts at or before the offset asked for while the
+        # offset advances by the part's full length. The next part therefore begins
+        # at or after where the previous one ended, and anything in between lands
+        # in no part at all. Missing seconds are missing bytes.
+        #
+        # 3% covers per-part container overhead (each part carries its own moov).
+        if [ "$ok" = "1" ]; then
+            part_bytes=0
+            for f in "${BASE}"-part*.mp4; do
+                [ -e "$f" ] || continue
+                part_bytes=$((part_bytes + $(wc -c < "$f")))
+            done
+            whole_bytes=$(wc -c < "$TMP")
+            if [ "$(awk -v p="$part_bytes" -v w="$whole_bytes" 'BEGIN{print (p < w * 0.97)}')" = "1" ]; then
+                ok=0
+                echo "leaf-record-convert: split kept only $((part_bytes * 100 / whole_bytes))% of $(basename "$BASE"), keeping one file" >&2
+            fi
+        fi
 
         if [ "$ok" = "1" ] && [ -s "${BASE}-part1.mp4" ]; then
             parts=$(ls "${BASE}"-part*.mp4 2>/dev/null | wc -l | tr -d ' ')
