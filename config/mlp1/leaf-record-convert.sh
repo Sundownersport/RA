@@ -100,23 +100,64 @@ probe_seconds() {
 # The lock lives in /tmp rather than beside the captures: it is tmpfs, so a reboot
 # during a conversion cannot strand it, and it keeps bookkeeping out of a folder
 # the user browses. A holder killed without a reboot is handled by the pid check.
+#
+# Ownership is proven by a per-run token, not by a pid. An earlier version read the
+# holder's pid, tested it with kill -0, and on failure did rm -rf + mkdir. That has
+# no atomicity between the test and the takeover: two runs could both find the lock
+# stale, and the second one's rm -rf would delete the first one's live lock, leaving
+# both convinced they held it -- precisely the corruption the lock exists to stop.
+# It also had two silent ways to fail: a lock directory whose pid file had not been
+# written yet was stolen deterministically, and a pid that got recycled pinned the
+# lock forever, disabling conversion until reboot with no symptom.
+#
+# mkdir alone is the whole mutual exclusion: it creates or it fails, atomically, and
+# nothing takes a lock away from a live holder. Staleness is handled by an mtime age
+# check instead of a pid, because a pid says nothing about whether THIS lock is the
+# one that process took.
 LOCK_DIR=/tmp/leaf-record-convert.lock
+LOCK_TOKEN=$$-$(date +%s 2>/dev/null || echo 0)
+LOCK_HELD=0
+# Nothing here runs for hours: the longest real conversion is minutes. An hour means
+# the holder is gone.
+LOCK_STALE_SECONDS=3600
 
 acquire_lock() {
-    if mkdir "$LOCK_DIR" 2>/dev/null; then      # mkdir either creates or fails, atomically
-        echo $$ > "$LOCK_DIR/pid" 2>/dev/null || true
-        return 0
-    fi
-    holder=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
-    if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
-        return 1                                 # a conversion really is running
-    fi
-    rm -rf "$LOCK_DIR"                           # stale: holder died without cleaning up
     if mkdir "$LOCK_DIR" 2>/dev/null; then
-        echo $$ > "$LOCK_DIR/pid" 2>/dev/null || true
+        printf '%s\n' "$LOCK_TOKEN" > "$LOCK_DIR/token" 2>/dev/null || {
+            rmdir "$LOCK_DIR" 2>/dev/null || true   # cannot prove ownership, so do not claim it
+            return 1
+        }
+        LOCK_HELD=1
         return 0
     fi
-    return 1                                     # lost the race to take it over
+
+    # Held. Only reclaim it if it is old enough that no live run could own it, and
+    # even then go through mkdir again so the reclaim itself stays atomic.
+    lock_age=$(awk -v now="$(date +%s 2>/dev/null || echo 0)" \
+                   -v then="$(date -r "$LOCK_DIR" +%s 2>/dev/null || echo 0)" \
+                   'BEGIN { print (now > then) ? now - then : 0 }')
+    [ "$lock_age" -lt "$LOCK_STALE_SECONDS" ] && return 1
+
+    rm -rf "$LOCK_DIR" 2>/dev/null || true
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+        printf '%s\n' "$LOCK_TOKEN" > "$LOCK_DIR/token" 2>/dev/null || {
+            rmdir "$LOCK_DIR" 2>/dev/null || true
+            return 1
+        }
+        LOCK_HELD=1
+        return 0
+    fi
+    return 1
+}
+
+# Release only what we actually own. Without the token check, a run whose lock was
+# reclaimed as stale would delete the reclaiming run's lock on its way out.
+release_lock() {
+    [ "$LOCK_HELD" = "1" ] || return 0
+    if [ "$(cat "$LOCK_DIR/token" 2>/dev/null || true)" = "$LOCK_TOKEN" ]; then
+        rm -rf "$LOCK_DIR" 2>/dev/null || true
+    fi
+    LOCK_HELD=0
 }
 
 if [ -d "$SRC" ]; then
@@ -124,7 +165,18 @@ if [ -d "$SRC" ]; then
         echo "leaf-record-convert: another conversion is running, skipping"
         exit 0
     fi
-    trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
+    # INT and TERM must exit explicitly. A POSIX trap that only cleans up RETURNS
+    # to where the script was interrupted, so the earlier version released the lock
+    # and then carried on converting -- unlocked, for the rest of the run.
+    trap 'release_lock' EXIT
+    trap 'release_lock; exit 130' INT
+    trap 'release_lock; exit 143' TERM
+
+    # The per-file runs below are ours and are covered by the lock we just took;
+    # they must not try to take it themselves or every one of them would decline.
+    # A hand-run single-file invocation has no such parent and does lock.
+    LEAF_RECORD_CONVERT_LOCKED=1
+    export LEAF_RECORD_CONVERT_LOCKED
 
     rc=0
     found=0
@@ -169,6 +221,20 @@ case "$SRC" in
     *.mkv) ;;
     *) die "expected a .mkv capture or a directory, got: $SRC" ;;
 esac
+
+# Single-file mode locks too, unless a directory run above already holds it. Without
+# this, running the script by hand on one capture while the daemon's directory pass
+# is in flight races freely on the same .mp4.part and the same part filenames --
+# which is the corruption the lock is for, entered through the other door.
+if [ "${LEAF_RECORD_CONVERT_LOCKED:-0}" != "1" ]; then
+    if ! acquire_lock; then
+        echo "leaf-record-convert: another conversion is running, skipping"
+        exit 0
+    fi
+    trap 'release_lock' EXIT
+    trap 'release_lock; exit 130' INT
+    trap 'release_lock; exit 143' TERM
+fi
 
 DST=${SRC%.mkv}.mp4
 BASE=${SRC%.mkv}
