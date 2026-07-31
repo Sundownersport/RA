@@ -1,0 +1,89 @@
+Clamp the recording scale factor to the core's actual resolution.
+
+scale_factor is a plain multiplier, which only makes sense if every core renders
+at the same size. A factor tuned for 240p pixel art -- where pre-scaling defeats
+4:2:0 chroma subsampling and costs almost nothing in bitrate -- is badly wrong for
+a core already running at 480p.
+
+Measured: PSX Tekken 3 outputs 368x480, and 3x made that 1104x1440. That is 3.1x
+the pixels of an NES capture at the same factor, and it pinned the encoder at 100%
+of its bitrate on exactly the detailed 3D content that needs bits the most. The
+stored frame was also portrait (0.77:1) and stretched to 4:3 on playback via SAR,
+so those extra vertical lines were squeezed away by the player anyway.
+
+Clamping happens here rather than in the record preset because this is the only
+place the core's real geometry is known, and it can change mid-game: Mega Drive
+titles switch between 256 and 320 wide, so no preset value can be right for all of
+a session.
+
+Integer division floors, which is what we want -- factors stay whole, since a
+fractional scale can yield odd dimensions that H.264 cannot represent in yuv420p.
+It never scales below 1, so a core larger than the cap is recorded at its native
+size rather than shrunk. Every 240p core keeps the factor it had.
+
+diff --git a/record/drivers/record_ffmpeg.c b/record/drivers/record_ffmpeg.c
+index cfe0b6acd0..24254a1368 100644
+--- a/record/drivers/record_ffmpeg.c
++++ b/record/drivers/record_ffmpeg.c
+@@ -393,6 +393,13 @@ static bool ffmpeg_init_audio(ffmpeg_t *handle, const char *audio_resampler)
+    return true;
+ }
+ 
++/* Ceiling for a pre-scaled recording frame. 720 matches the device panel and
++ * leaves the 240p cores untouched at 3x (224 -> 672, 240 -> 720), while a core
++ * already at 480p is recorded natively instead of being tripled. The width cap
++ * is a second guard for unusually wide arcade resolutions. */
++#define JW_RECORD_MAX_HEIGHT 720u
++#define JW_RECORD_MAX_WIDTH  1280u
++
+ static bool ffmpeg_init_video(ffmpeg_t *handle)
+ {
+    size_t size;
+@@ -481,8 +488,45 @@ static bool ffmpeg_init_video(ffmpeg_t *handle)
+    /* Useful to set scale_factor to 2 for chroma subsampled formats to
+     * maintain full chroma resolution. (Or just use 4:4:4 or RGB ...)
+     */
+-   param->out_width  = (float)param->out_width  * params->scale_factor;
+-   param->out_height = (float)param->out_height * params->scale_factor;
++   {
++      /* scale_factor is a plain multiplier, which is only sensible if every core
++       * renders at the same size. They do not. A factor tuned for 240p pixel art
++       * (where pre-scaling defeats 4:2:0 chroma subsampling and costs almost
++       * nothing) is badly wrong for a core already running at 480p: PSX Tekken 3
++       * outputs 368x480, and 3x made that 1104x1440 -- 3.1x the pixels of an NES
++       * capture at the same factor, which pinned the encoder at 100% of its
++       * bitrate on exactly the detailed 3D content that needs bits the most.
++       *
++       * Clamp the factor to whatever keeps the encode inside a sane frame instead.
++       * Done here rather than in the preset because this is the only place the
++       * core's real geometry is known, and it can change mid-game -- Mega Drive
++       * titles switch between 256 and 320 wide, so a preset cannot get it right.
++       *
++       * Integer division floors, which is what we want: factors stay whole, since
++       * a fractional scale can yield odd dimensions that H.264 cannot represent in
++       * yuv420p. Never scales below 1, so a core larger than the cap is recorded
++       * at its native size rather than shrunk. */
++      unsigned limit_h = param->out_height
++         ? (JW_RECORD_MAX_HEIGHT / param->out_height) : 1u;
++      unsigned limit_w = param->out_width
++         ? (JW_RECORD_MAX_WIDTH  / param->out_width)  : 1u;
++      unsigned limit   = limit_h < limit_w ? limit_h : limit_w;
++      float    scale   = params->scale_factor;
++
++      if (limit < 1u)
++         limit = 1u;
++      if (scale > (float)limit)
++         scale = (float)limit;
++      if (scale < 1.0f)
++         scale = 1.0f;
++
++      if (scale != params->scale_factor)
++         RARCH_LOG("[Recording] Clamped scale %.1f -> %.1f for %ux%u source.\n",
++               params->scale_factor, scale, param->out_width, param->out_height);
++
++      param->out_width  = (float)param->out_width  * scale;
++      param->out_height = (float)param->out_height * scale;
++   }
+ 
+    video->codec->codec_type          = AVMEDIA_TYPE_VIDEO;
+    video->codec->width               = param->out_width;

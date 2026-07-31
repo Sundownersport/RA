@@ -200,6 +200,10 @@ apply_named_patch() {
             patch_path="$REPO_ROOT/patches/mlp1/0004-record-extension-from-format.patch"
             patch_label="mlp1/$(basename "$patch_path")"
             ;;
+        record-scale-clamp)
+            patch_path="$REPO_ROOT/patches/mlp1/0005-record-scale-clamp.patch"
+            patch_label="mlp1/$(basename "$patch_path")"
+            ;;
         "")
             return 0
             ;;
