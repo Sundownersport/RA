@@ -196,12 +196,16 @@ apply_named_patch() {
             patch_path="$REPO_ROOT/patches/mlp1/0003-controller-only-bindings-ui.patch"
             patch_label="mlp1/$(basename "$patch_path")"
             ;;
+        record-scale-clamp)
+            patch_path="$REPO_ROOT/patches/mlp1/0005-record-scale-clamp.patch"
+            patch_label="mlp1/$(basename "$patch_path")"
+            ;;
         "")
             return 0
             ;;
         *)
             echo "unknown MLP1 patch set entry: $name" >&2
-            echo "known entries: portrait-rotation, command-menu, jawaka-load-content, controller-bindings" >&2
+            echo "known entries: portrait-rotation, command-menu, jawaka-load-content, controller-bindings, record-scale-clamp" >&2
             exit 1
             ;;
     esac
@@ -227,6 +231,45 @@ if [[ -n "$MLP1_PATCH_SET" ]]; then
 fi
 
 make distclean >/dev/null 2>&1 || true
+
+# --- FFmpeg (optional, opt-in) --------------------------------------------
+# The device's own FFmpeg 4.4 is built --disable-encoders with only mjpeg/png
+# for video, so linking against it would give MJPEG-in-mpegts, software
+# encoded. build-mlp1-ffmpeg.sh produces an FFmpeg 6.1 with h264_rkmpp, which
+# encodes on the RK3566 VPU instead.
+#
+# It is staged into the sysroot here rather than pointed at in place: the
+# toolchain's pkg-config prepends the sysroot to every path, so a .pc living
+# outside it resolves to nonsense. The sysroot lives inside the image and does
+# not survive --rm, so this has to run on every build.
+#
+# SONAMEs are 60/60/58/7/4 against the device's 58/58/56/5/3, so nothing stock
+# is shadowed and the two sets coexist.
+MLP1_FFMPEG_DIR="${MLP1_FFMPEG_DIR:-/workspace/output/mlp1/ffmpeg}"
+ffmpeg_flag="--disable-ffmpeg"
+if [[ -d "$MLP1_FFMPEG_DIR/lib" && -f "$MLP1_FFMPEG_DIR/lib/pkgconfig/libavcodec.pc" ]]; then
+    echo "staging FFmpeg from $MLP1_FFMPEG_DIR into the sysroot"
+    cp -a "$MLP1_FFMPEG_DIR"/lib/lib*.so* "$SYSROOT/usr/lib/"
+    cp -a "$MLP1_FFMPEG_DIR"/include/* "$SYSROOT/usr/include/"
+    mkdir -p "$SYSROOT/usr/lib/pkgconfig"
+    for pc in "$MLP1_FFMPEG_DIR"/lib/pkgconfig/*.pc; do
+        sed -e 's|^prefix=.*|prefix=/usr|' \
+            -e 's|^exec_prefix=.*|exec_prefix=${prefix}|' \
+            -e 's|^libdir=.*|libdir=${prefix}/lib|' \
+            -e 's|^includedir=.*|includedir=${prefix}/include|' \
+            "$pc" > "$SYSROOT/usr/lib/pkgconfig/$(basename "$pc")"
+    done
+    ffmpeg_flag="--enable-ffmpeg"
+    # The runpath is set with patchelf AFTER linking, not through LDFLAGS. The
+    # literal string has to survive make and then the shell make invokes, and
+    # each layer eats it differently: $ORIGIN lost its $O to make's
+    # single-character variable expansion and linked as "RIGIN/../lib/ffmpeg",
+    # then $$ORIGIN survived make and was eaten by the shell as "/../lib/ffmpeg".
+    # Both linked and reported success. patchelf writes the bytes directly.
+else
+    echo "no FFmpeg at $MLP1_FFMPEG_DIR -- building without recording support"
+    echo "  (run build-mlp1-ffmpeg.sh first if you want h264_rkmpp recording)"
+fi
 
 export CFLAGS="${CFLAGS:-} $UMRK_MLP1_PROFILE_CFLAGS -D_GNU_SOURCE"
 export CXXFLAGS="${CXXFLAGS:-} $UMRK_MLP1_PROFILE_CXXFLAGS -D_GNU_SOURCE"
@@ -262,6 +305,7 @@ configure_flags=(
     "--enable-opengles"
     "--enable-opengles3"
     "--enable-egl"
+    "$ffmpeg_flag"
 )
 
 ./configure "${configure_flags[@]}"
@@ -271,6 +315,19 @@ make -j"$JOBS"
 mkdir -p "$OUTPUT_BIN_DIR"
 cp -f retroarch "$OUTPUT_BIN_DIR/retroarch"
 "${STRIP:-aarch64-buildroot-linux-gnu-strip}" -s "$OUTPUT_BIN_DIR/retroarch"
+
+if [[ "$ffmpeg_flag" == "--enable-ffmpeg" ]]; then
+    # $ORIGIN resolves to the directory holding the binary, so this finds our
+    # FFmpeg at .system/leaf/platforms/mlp1/lib/ffmpeg on the SD card without
+    # shadowing the stock libav* that Kodi and friends use.
+    patchelf --set-rpath '$ORIGIN/../lib/ffmpeg' "$OUTPUT_BIN_DIR/retroarch"
+    rpath_actual="$(patchelf --print-rpath "$OUTPUT_BIN_DIR/retroarch")"
+    if [[ "$rpath_actual" != '$ORIGIN/../lib/ffmpeg' ]]; then
+        echo "runpath did not take: got '$rpath_actual'" >&2
+        exit 1
+    fi
+    echo "runpath: $rpath_actual"
+fi
 
 verification_status="skipped"
 verified=false
