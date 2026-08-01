@@ -196,10 +196,6 @@ apply_named_patch() {
             patch_path="$REPO_ROOT/patches/mlp1/0003-controller-only-bindings-ui.patch"
             patch_label="mlp1/$(basename "$patch_path")"
             ;;
-        record-extension)
-            patch_path="$REPO_ROOT/patches/mlp1/0004-record-extension-from-format.patch"
-            patch_label="mlp1/$(basename "$patch_path")"
-            ;;
         record-scale-clamp)
             patch_path="$REPO_ROOT/patches/mlp1/0005-record-scale-clamp.patch"
             patch_label="mlp1/$(basename "$patch_path")"
@@ -209,7 +205,7 @@ apply_named_patch() {
             ;;
         *)
             echo "unknown MLP1 patch set entry: $name" >&2
-            echo "known entries: portrait-rotation, command-menu, jawaka-load-content, controller-bindings" >&2
+            echo "known entries: portrait-rotation, command-menu, jawaka-load-content, controller-bindings, record-scale-clamp" >&2
             exit 1
             ;;
     esac
