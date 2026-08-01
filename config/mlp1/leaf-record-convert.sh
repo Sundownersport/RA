@@ -73,9 +73,18 @@ done
 # working directory, so a relative argument turned every entry into
 # "sub/sub/g00001.mp4" and every concat failed -- splitting quietly did nothing
 # but log a line, for any caller that passed a relative path.
+#
+# The cd is checked rather than substituted blind: a failing command substitution
+# inside an assignment does NOT trip set -e in ash or dash, so an unreadable
+# parent silently produced "/<basename>" and the script carried on against a path
+# in the root -- which, for an argument like "tmp" from a directory that has no
+# "tmp", is an existing directory it would then run over with --delete-source.
 case "$SRC" in
     /*) ;;
-    *)  SRC="$(CDPATH= cd -- "$(dirname -- "$SRC")" 2>/dev/null && pwd)/$(basename -- "$SRC")" ;;
+    *)  SRC_DIR=$(CDPATH= cd -- "$(dirname -- "$SRC")" 2>/dev/null && pwd) || SRC_DIR=""
+        [ -n "$SRC_DIR" ] || die "cannot resolve $SRC"
+        SRC="$SRC_DIR/$(basename -- "$SRC")"
+        ;;
 esac
 
 # Join the pieces listed in $1 into the single MP4 at $2, stream-copied.
@@ -131,18 +140,42 @@ jw_kb_covers() {
              'BEGIN { print (got >= want - 2 && got >= want * 0.999) ? 1 : 0 }')" = "1" ]
 }
 
-# Has the capture stopped growing? RetroArch may still be writing it.
+# Is anything still holding this capture open?
 #
 # The directory pass re-scans after each round, and a round can take minutes, so
 # it will happily glob a capture belonging to a game the user started AFTER this
 # run began. ffmpeg reads the partial file, warns, and exits 0; the fragment then
-# looked like a finished conversion, and with --delete-source the still-open .mkv
-# was unlinked out from under RetroArch. Measured: a 40.8-second recording became
+# looks like a finished conversion, and with --delete-source the still-open .mkv
+# is unlinked out from under RetroArch. Measured: a 40.8-second recording became
 # a 3.03-second clip and the original was gone.
 #
-# Two samples a couple of seconds apart is enough -- the recorder writes
-# continuously, several hundred KB a second at the shipping bitrate.
+# ASK THE KERNEL. The first attempt at this compared two file sizes two seconds
+# apart, which is a statistical answer to a question that has an exact one:
+# RetroArch writes through libavformat's 32KB buffer, so a paused game or a
+# low-motion scene holds the size flat for several seconds while recording
+# continues. Demonstrated at ~6KB/s -- identical sizes at t+04 and t+06, and the
+# sampler called it settled. Worse, the payload gate downstream cannot catch the
+# result, because it measures the same partial file the conversion read, so the
+# two agree and it passes.
+#
+# An open file descriptor cannot be faked or waited out. /proc/<pid>/fd/* is
+# every fd on the system, and we run as root, so this sees RetroArch's.
+jw_capture_in_use() {
+    for _fd in /proc/[0-9]*/fd/*; do
+        [ -e "$_fd" ] || continue
+        [ "$(readlink "$_fd" 2>/dev/null || true)" = "$1" ] && return 0
+    done
+    return 1
+}
+
+# Fallback for systems without /proc (a desktop checkout, where this script is
+# developed and tested). Sampling is the weaker test -- see above -- so it is
+# only ever reached where the exact one is unavailable.
 jw_capture_settled() {
+    if [ -d /proc/self/fd ]; then
+        ! jw_capture_in_use "$1" && [ -s "$1" ]
+        return
+    fi
     _a=$(wc -c < "$1" 2>/dev/null || echo 0)
     sleep 2
     _b=$(wc -c < "$1" 2>/dev/null || echo 0)
@@ -219,11 +252,17 @@ acquire_lock() {
     # failure, which made the age about 1.79 billion seconds and declared EVERY
     # lock stale -- a fail-OPEN default on the one test that stands between two
     # runs and the same files. Unreadable now means "leave it alone".
+    # Each clock tested SEPARATELY. Concatenating them and testing the pair hides
+    # the case that matters: an empty lock_then beside a valid lock_now still
+    # looks like digits, the subtraction then treats the empty as 0, and every
+    # held lock reads as 1.79 billion seconds old and gets reclaimed. That is
+    # mutual exclusion switched off -- demonstrated with a date that rejects -r,
+    # where two runs both acquired the lock -- and it is the exact fail-open this
+    # block was rewritten to remove.
     lock_now=$(date +%s 2>/dev/null || echo "")
     lock_then=$(date -r "$LOCK_DIR" +%s 2>/dev/null || echo "")
-    case "$lock_now$lock_then" in
-        *[!0-9]*|"") return 1 ;;
-    esac
+    case "$lock_now" in ''|*[!0-9]*) return 1 ;; esac
+    case "$lock_then" in ''|*[!0-9]*) return 1 ;; esac
     [ "$((lock_now - lock_then))" -lt "$LOCK_STALE_SECONDS" ] && return 1
 
     # Reclaiming is still a race: two runs can both reach this line having both
@@ -391,8 +430,16 @@ if [ "$SPLIT" = "1" ]; then
 else
     need_mult=2      # just the .mp4, which runs ~0.86x the capture
 fi
+# Read the LAST line and count fields from the right. busybox df puts the device
+# name on a line of its own when it runs past 20 characters, so "NR==2 {print $4}"
+# came back empty, [ -n "$free_kb" ] was then false, and the entire space check
+# quietly skipped itself -- fail-open on a guard whose whole job is to fail
+# closed. Counting from the right also survives the wrapped layout, since
+# Available is always two fields before the mount point.
 src_kb=$(du -k "$SRC" 2>/dev/null | awk '{print $1; exit}')
-free_kb=$(df -k "$(dirname "$SRC")" 2>/dev/null | awk 'NR==2 {print $4; exit}')
+free_kb=$(df -k "$(dirname "$SRC")" 2>/dev/null | awk 'END { if (NF >= 3) print $(NF - 2) }')
+case "$src_kb" in ''|*[!0-9]*) src_kb="" ;; esac
+case "$free_kb" in ''|*[!0-9]*) free_kb="" ;; esac
 if [ -n "$src_kb" ] && [ -n "$free_kb" ] && \
    [ "$free_kb" -lt $((src_kb * need_mult)) ]; then
     die "not enough free space to convert $(basename "$SRC") (need ~$((src_kb * need_mult / 1024))MB, have $((free_kb / 1024))MB)"
@@ -548,16 +595,25 @@ if [ "$SPLIT" = "1" ] && [ "$(wc -c < "$TMP")" -gt "$SPLIT_LIMIT_BYTES" ]; then
             # The pieces must account for the file before anything is built from
             # them. Checked in bytes off the filesystem, not from the numbers that
             # drove the cut.
+            SPLIT_DECLINED=1
             echo "leaf-record-convert: cut kept only $((piece_total * 100 / whole_bytes))% of $(basename "$BASE"), keeping one file" >&2
         else
             # Greedy first-fit over a sequence that has to stay in order is
             # optimal for this: it yields the fewest parts that each fit.
+            # `printf '' >`, never `: >`. The colon is a POSIX SPECIAL builtin, so
+            # a redirection failure on it terminates a non-interactive shell
+            # outright -- verified, busybox ash rc=1 and dash rc=2, with nothing
+            # after it running. A full card during a split is exactly when that
+            # fires, and it would take the scratch-directory cleanup down with it,
+            # stranding tens of MB of pieces on an already-full card. printf is a
+            # regular builtin, so its failure is a status we can act on.
             ok=1
             part_n=1
             group_bytes=0
             list="$SEGDIR/list.txt"
-            : > "$list"
+            printf '' > "$list" || ok=0
             for f in "$SEGDIR"/g*.mp4; do
+                [ "$ok" = "1" ] || break
                 [ -s "$f" ] || continue
                 sz=$(($(wc -c < "$f")))
                 if [ "$group_bytes" -gt 0 ] && \
@@ -568,9 +624,15 @@ if [ "$SPLIT" = "1" ] && [ "$(wc -c < "$TMP")" -gt "$SPLIT_LIMIT_BYTES" ]; then
                     fi
                     part_n=$((part_n + 1))
                     group_bytes=0
-                    : > "$list"
+                    if ! printf '' > "$list"; then
+                        ok=0
+                        break
+                    fi
                 fi
-                printf "file '%s'\n" "$f" >> "$list"
+                if ! printf "file '%s'\n" "$f" >> "$list"; then
+                    ok=0
+                    break
+                fi
                 group_bytes=$((group_bytes + sz))
             done
             # The final group has no successor to trigger the flush above.
