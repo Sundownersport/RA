@@ -73,6 +73,18 @@ done
 # ffprobe because the build ships only the one binary. Prints nothing it cannot
 # parse, and every caller treats empty as "do not split" -- losing the split is
 # an inconvenience, mangling the recording is not.
+#
+# ⛔ Only ever call this on the CONVERTED .mp4, never on the .mkv capture. The
+# capture's duration header is wrong: RetroArch writes a FLAC track DURATION of
+# actual + 4.512s (exactly 47 audio frames), and the Matroska segment duration
+# takes the larger of the two tracks, so the file reports up to 23% longer than
+# it is. Measured across five captures -- 23.90 against 19.43, 24.29 against
+# 19.83, 45.26 against 40.80, 72.19 against 67.67, 10.55 against 6.04 -- while
+# the packets themselves are continuous and complete every time, and the video
+# track's own DURATION tag is always exact. Remuxing the same FLAC packets with
+# -c copy writes 19.450, so the number is RetroArch's, not the data's.
+# The .mp4 is authored from packets and is correct. Deriving seg_time from the
+# .mkv instead would inflate it by that margin and oversize every part.
 probe_seconds() {
     "$FFMPEG" -hide_banner -i "$1" 2>&1 \
         | sed -n 's/.*Duration: \([0-9][0-9]\):\([0-9][0-9]\):\([0-9][0-9]\.[0-9]*\).*/\1 \2 \3/p' \
