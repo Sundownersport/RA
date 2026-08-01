@@ -42,13 +42,12 @@ AAC_CODER=fast
 # "9.6 MB"; both were right, and the file was over the line either way. Since it is
 # not certain which Discord enforces, come in under the smaller reading.
 SPLIT_LIMIT_BYTES=10000000      # the limit each part must come in under
-# What each part aims for. Parts can only break on a keyframe, and the capture puts
-# one every 5 seconds (measured: 9 keyframes across a 40.8s clip, at 0/5/10/...), so
-# a part lands on whichever keyframe first passes the requested length and overshoots
-# by up to one GOP. 7% of headroom covers that at the ~2500k capture bitrate, and the
-# retry below covers the rest.
-SPLIT_TARGET_BYTES=9300000
+# No target under the limit, and no headroom, because nothing here is predicted:
+# parts are assembled from pieces whose sizes have already been read off the
+# filesystem. Earlier versions aimed at 9300000 to absorb the overshoot of a
+# guess; see the split block for why the guessing went.
 SPLIT_MAX_PARTS=64              # backstop; no real capture needs this many
+SPLIT_MAX_PIECES=512            # keyframe pieces; a 3min clip makes ~42
 
 die() { echo "leaf-record-convert: $*" >&2; exit 1; }
 
@@ -69,28 +68,36 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# Seconds from ffmpeg's "Duration: HH:MM:SS.ss". Parsed from ffmpeg rather than
-# ffprobe because the build ships only the one binary. Prints nothing it cannot
-# parse, and every caller treats empty as "do not split" -- losing the split is
-# an inconvenience, mangling the recording is not.
+# Join the pieces listed in $1 into the single MP4 at $2, stream-copied.
 #
-# ⛔ Only ever call this on the CONVERTED .mp4, never on the .mkv capture. The
-# capture's duration header is wrong: RetroArch writes a FLAC track DURATION of
-# actual + 4.512s (exactly 47 audio frames), and the Matroska segment duration
-# takes the larger of the two tracks, so the file reports up to 23% longer than
-# it is. Measured across five captures -- 23.90 against 19.43, 24.29 against
-# 19.83, 45.26 against 40.80, 72.19 against 67.67, 10.55 against 6.04 -- while
-# the packets themselves are continuous and complete every time, and the video
-# track's own DURATION tag is always exact. Remuxing the same FLAC packets with
-# -c copy writes 19.450, so the number is RetroArch's, not the data's.
-# The .mp4 is authored from packets and is correct. Deriving seg_time from the
-# .mkv instead would inflate it by that margin and oversize every part.
-probe_seconds() {
-    "$FFMPEG" -hide_banner -i "$1" 2>&1 \
-        | sed -n 's/.*Duration: \([0-9][0-9]\):\([0-9][0-9]\):\([0-9][0-9]\.[0-9]*\).*/\1 \2 \3/p' \
-        | head -1 \
-        | awk '{ if (NF == 3) printf "%.3f", $1 * 3600 + $2 * 60 + $3 }'
+# -safe 0 because the list holds absolute paths. -f mp4 because the caller writes
+# to a scratch name, and ffmpeg picks its muxer from the extension. faststart so
+# each part streams in a browser rather than downloading whole first.
+#
+# Joining costs a little: ffmpeg writes the H.264 parameter sets in-band at each
+# join, so one keyframe per piece grows. Measured exactly on the Metroid capture
+# -- 41 of 10412 packets differed, every one a keyframe, each by precisely 103
+# bytes, 4223 in total on a 44869870-byte file, or 0.009%. Frame count is
+# unchanged (10412 either way), so nothing is duplicated or dropped; the parts
+# simply carry their own SPS/PPS, which is valid and if anything more robust.
+# It is also strictly additive, and the caller re-measures every finished part
+# against the limit, so it cannot push one over unnoticed.
+jw_concat_group() {
+    "$FFMPEG" -v error -y -f concat -safe 0 -i "$1" -c copy \
+              -movflags +faststart -f mp4 "$2" 2>/dev/null && [ -s "$2" ]
 }
+
+# ⛔ NOTHING here may work from a duration, and in particular nothing may read one
+# out of the .mkv. This used to parse ffmpeg's "Duration:" line to size a split,
+# and the capture's is wrong: RetroArch writes a FLAC track DURATION of actual +
+# 4.512s (exactly 47 audio frames) and the Matroska segment duration takes the
+# larger of the two tracks, so a capture reports up to 23% longer than it is.
+# Measured across five of them -- 23.90 against 19.43, 24.29 against 19.83, 45.26
+# against 40.80, 72.19 against 67.67, 10.55 against 6.04 -- while the packets are
+# continuous and complete every time and the video track's own tag is always
+# exact. Remuxing the same FLAC packets with -c copy writes the correct value, so
+# the number is RetroArch's, not the data's. The split now packs measured bytes
+# and never asks how long anything is, which sidesteps this entirely.
 
 [ -x "$FFMPEG" ] || die "no ffmpeg beside this script at $FFMPEG"
 
@@ -310,158 +317,181 @@ fi
 # Everything is stream-copied, so this is fast and lossless; the audio was already
 # encoded once, into the temp file.
 #
-# Cut with the SEGMENT MUXER, which is what makes the parts add up to the whole.
-# Two earlier shapes did not:
+# CUT AT EVERY KEYFRAME, THEN PACK BY BYTES. The split runs in two stream-copy
+# passes: the segment muxer breaks the file at each keyframe, and consecutive
+# pieces are then concatenated into parts, taking pieces until the next one would
+# cross the limit.
 #
-#   * a computed seconds-per-part from the average bitrate -- wrong for VBR, since
-#     a busy stretch runs far above the mean (peak second 4071k against a 2196k
-#     average) and an average-sized window over an explosion sails past the target;
-#   * a loop of `-ss <offset> -i ... -fs <target>` -- `-ss` before `-i` seeks
-#     BACKWARD to the nearest keyframe, so a part starts before the offset asked
-#     for while the offset advances by the part's own length. Measured on a 40.8s
-#     Tekken clip: the two parts held 2273 video packets against the source's 2041,
-#     i.e. 4.6 seconds duplicated across the seam, and part 2's duration header
-#     (6.18s) disagreed with the 10.8s of video actually inside it.
+# Packing beats sizing a window, and the difference is not small. Three shapes
+# were tried before this one:
 #
-# The segment muxer starts each new file exactly at the first keyframe past the
-# requested length and never rewinds, so parts tile the recording end to end.
-# Verified on the same clip: 1750 + 291 = 2041 video packets, matching the source
-# exactly, and 11479519 bytes of parts against 11477960 whole.
+#   * seconds-per-part from the average bitrate -- wrong for VBR, since a busy
+#     stretch runs far above the mean (peak second 4071k against a 2196k average)
+#     and an average-sized window over an explosion sails past the target;
+#   * `-ss <offset> -i ... -fs <target>` in a loop -- `-ss` before `-i` seeks
+#     BACKWARD to the nearest keyframe, so a part began before the offset asked
+#     for while the offset advanced by the part's own length. On a 40.8s Tekken
+#     clip the parts held 2273 video packets against the source's 2041: 4.6
+#     seconds duplicated across the seam;
+#   * one `-segment_time` for the whole file, shrunk on retry until the biggest
+#     part fit. Correct, but wasteful. A fixed DURATION cannot hold a fixed SIZE
+#     when the bitrate varies, so the window has to be sized for the worst
+#     stretch and every quieter stretch is then under-filled. Measured on a
+#     2m54s Metroid Fusion capture: it shipped 7 parts of 9.53, 6.58, 6.43, 6.15,
+#     9.76, 3.91 and 2.54 MB -- two of them barely a quarter full -- where
+#     packing the same 44869870 bytes gives 5 of 9.54, 9.54, 9.63, 9.76 and
+#     6.45 MB. Two extra uploads, every time.
 #
-# Size is then an OUTER loop: aim, measure the biggest part, shrink and re-cut if
-# it came out over. Re-cutting is a stream copy over a file that is already local,
-# so an extra attempt is cheap.
+# Nothing is predicted here, which is why there is no target under the limit and
+# no retry: every piece size is read off the filesystem before it is committed to
+# a part. Concatenating k pieces also comes out slightly UNDER their sum, since
+# the result carries one container header instead of k -- measured at ~1.5KB per
+# piece, 44932035 summed against 44869870 whole -- so packing to the limit errs
+# in the safe direction.
+#
+# `-segment_time 1` means "cut at the first keyframe past every second", which
+# for any real capture is simply "cut at every keyframe" -- the GOP is seconds
+# long. It avoids having to know the keyframe interval, which varies by core.
 #
 # Every failure path here falls back to keeping the single file. A clip that is
 # too big to post is a nuisance; a clip destroyed by a half-finished split is not
 # recoverable, and the .mkv may already have been deleted on a previous run.
 #
-# Segments are written into a scratch directory and only moved into place once the
-# whole set has passed its checks. Writing them straight to their final names left
-# a crashed run looking finished -- the "already converted" test keys on part1
-# being newer than the capture, so a truncated split was skipped forever after.
-# The name is fixed rather than derived from the game so no ROM title can turn
-# into part of a printf pattern (a "%d" in a filename would be substituted).
+# Pieces and parts are built in a scratch directory and only moved into place
+# once the whole set has passed its checks. Written straight to their final
+# names, a crashed split left part1 newer than the capture -- which is exactly
+# what the "already converted" test reads -- so a truncated split was skipped
+# forever after. The directory name is fixed rather than derived from the game,
+# so no ROM title can end up inside a printf pattern or a concat list.
 SPLIT_DONE=0
 if [ "$SPLIT" = "1" ] && [ "$(wc -c < "$TMP")" -gt "$SPLIT_LIMIT_BYTES" ]; then
-    duration=$(probe_seconds "$TMP")
-    whole_bytes=$(wc -c < "$TMP")
+    whole_bytes=$(($(wc -c < "$TMP")))
     SEGDIR="$(dirname "$SRC")/.leaf-split-tmp"
-    if [ -n "$duration" ]; then
-        ok=0
-        attempt=1
-        prev_biggest=0
-        # First guess is proportional: the clip is one bitrate on average, so
-        # target/whole of its length is roughly the length that holds a target.
-        seg_time=$(awk -v d="$duration" -v w="$whole_bytes" -v t="$SPLIT_TARGET_BYTES" \
-                       'BEGIN{ printf "%.3f", d * t / w }')
-        while [ "$attempt" -le 4 ]; do
-            # Below one segment interval there is nothing left to give: parts can
-            # only break on keyframes, so asking for less just returns the same cut.
-            [ "$(awk -v s="$seg_time" 'BEGIN{print (s < 1)}')" = "1" ] && break
+    ok=0
 
-            rm -rf "$SEGDIR"
-            mkdir -p "$SEGDIR" 2>/dev/null || break
+    rm -rf "$SEGDIR"
+    if mkdir -p "$SEGDIR" 2>/dev/null && \
+       "$FFMPEG" -v error -y -i "$TMP" -c copy \
+            -f segment -segment_time 1 -reset_timestamps 1 \
+            -segment_start_number 1 -segment_format mp4 \
+            "$SEGDIR/g%05d.mp4" 2>/dev/null && \
+       [ -s "$SEGDIR/g00001.mp4" ]; then
 
-            if ! "$FFMPEG" -v error -y -i "$TMP" -c copy \
-                    -f segment -segment_time "$seg_time" -reset_timestamps 1 \
-                    -segment_start_number 1 -segment_format mp4 \
-                    -segment_format_options movflags=+faststart \
-                    "$SEGDIR/p%d.mp4" 2>/dev/null; then
-                break
-            fi
-            [ -s "$SEGDIR/p1.mp4" ] || break
-
-            seg_bytes=0
-            biggest_bytes=0
-            count=0
-            for f in "$SEGDIR"/p*.mp4; do
-                [ -s "$f" ] || continue
-                # $(( )) around wc strips the leading whitespace some wc builds
-                # print, which would otherwise travel into every comparison below.
-                sz=$(($(wc -c < "$f")))
-                seg_bytes=$((seg_bytes + sz))
-                if [ "$sz" -gt "$biggest_bytes" ]; then
-                    biggest_bytes=$sz
-                fi
-                count=$((count + 1))
-            done
-
-            # One segment means the guess was longer than the recording; more than
-            # the backstop means something is very wrong with the arithmetic.
-            if [ "$count" -lt 2 ] || [ "$count" -gt "$SPLIT_MAX_PARTS" ]; then
-                break
-            fi
-
-            # The numbering has to be unbroken, because the move below walks it and
-            # stops at the first name it cannot find. An empty file in the middle
-            # would end that walk early and leave the tail of the recording behind
-            # in the scratch directory, with the run still reporting success.
-            i=1
-            while [ "$i" -le "$count" ] && [ -s "$SEGDIR/p${i}.mp4" ]; do
-                i=$((i + 1))
-            done
-            if [ "$i" -le "$count" ]; then
-                echo "leaf-record-convert: segment $i missing for $(basename "$BASE"), keeping one file" >&2
-                break
-            fi
-
-            # Independent check on the muxer's own bookkeeping, in BYTES read back
-            # from the filesystem rather than from the numbers that drove the cut.
-            # 3% covers each part carrying its own moov.
-            if [ "$(awk -v p="$seg_bytes" -v w="$whole_bytes" 'BEGIN{print (p < w * 0.97)}')" = "1" ]; then
-                echo "leaf-record-convert: split kept only $((seg_bytes * 100 / whole_bytes))% of $(basename "$BASE"), keeping one file" >&2
-                break
-            fi
-
-            if [ "$biggest_bytes" -le "$SPLIT_LIMIT_BYTES" ]; then
-                ok=1
-                break
-            fi
-
-            # Overshot. Normally shrink by exactly how much the worst part missed
-            # by, with a little extra so the next keyframe boundary does not land
-            # on the line.
-            #
-            # That alone can stall, because parts break on keyframes and the
-            # proportional shrink can land inside the same 5-second window -- so
-            # the cut does not move and the attempt returns a byte-identical set.
-            # Seen with a 3MB test limit: 6.952s and 6.151s both broke at 10s and
-            # both produced a 3212250-byte part. When an attempt makes no progress,
-            # step down hard enough to clear a whole keyframe interval instead.
-            if [ "$attempt" -gt 1 ] && [ "$biggest_bytes" -ge "$prev_biggest" ]; then
-                seg_time=$(awk -v s="$seg_time" 'BEGIN{ printf "%.3f", s * 0.6 }')
-            else
-                seg_time=$(awk -v s="$seg_time" -v b="$biggest_bytes" -v t="$SPLIT_TARGET_BYTES" \
-                               'BEGIN{ printf "%.3f", s * t / b * 0.98 }')
-            fi
-            prev_biggest=$biggest_bytes
-            attempt=$((attempt + 1))
+        # Piece sizes, read back from the filesystem. Independent of anything
+        # that produced them.
+        piece_total=0
+        piece_count=0
+        piece_max=0
+        for f in "$SEGDIR"/g*.mp4; do
+            [ -s "$f" ] || continue
+            sz=$(($(wc -c < "$f")))
+            piece_total=$((piece_total + sz))
+            [ "$sz" -gt "$piece_max" ] && piece_max=$sz
+            piece_count=$((piece_count + 1))
         done
 
-        if [ "$ok" = "1" ]; then
-            rm -f "${BASE}"-part*.mp4
-            n=1
-            while [ -s "$SEGDIR/p${n}.mp4" ]; do
-                mv "$SEGDIR/p${n}.mp4" "${BASE}-part${n}.mp4" || { ok=0; break; }
-                n=$((n + 1))
-            done
-            if [ "$ok" = "1" ]; then
-                SPLIT_DONE=1
-                rm -f "$TMP"
-                sync
-                echo "leaf-record-convert: $(basename "$BASE") split into $((n - 1)) parts"
-            else
-                rm -f "${BASE}"-part*.mp4
-                echo "leaf-record-convert: could not place parts for $(basename "$BASE"), keeping one file" >&2
-            fi
+        # A single keyframe-to-keyframe piece over the limit cannot be split any
+        # finer without re-encoding, so packing cannot help and one file is the
+        # honest answer.
+        if [ "$piece_count" -lt 2 ]; then
+            echo "leaf-record-convert: nothing to split in $(basename "$BASE"), keeping one file" >&2
+        elif [ "$piece_count" -gt "$SPLIT_MAX_PIECES" ]; then
+            echo "leaf-record-convert: $piece_count keyframe pieces in $(basename "$BASE"), keeping one file" >&2
+        elif [ "$piece_max" -gt "$SPLIT_LIMIT_BYTES" ]; then
+            echo "leaf-record-convert: a single keyframe span of $(basename "$BASE") is over the limit, keeping one file" >&2
+        elif [ "$(awk -v p="$piece_total" -v w="$whole_bytes" 'BEGIN{print (p < w * 0.97)}')" = "1" ]; then
+            # The pieces must account for the file before anything is built from
+            # them. Checked in bytes off the filesystem, not from the numbers that
+            # drove the cut.
+            echo "leaf-record-convert: cut kept only $((piece_total * 100 / whole_bytes))% of $(basename "$BASE"), keeping one file" >&2
         else
-            echo "leaf-record-convert: split failed for $(basename "$BASE"), keeping one file" >&2
+            # Greedy first-fit over a sequence that has to stay in order is
+            # optimal for this: it yields the fewest parts that each fit.
+            ok=1
+            part_n=1
+            group_bytes=0
+            list="$SEGDIR/list.txt"
+            : > "$list"
+            for f in "$SEGDIR"/g*.mp4; do
+                [ -s "$f" ] || continue
+                sz=$(($(wc -c < "$f")))
+                if [ "$group_bytes" -gt 0 ] && \
+                   [ $((group_bytes + sz)) -gt "$SPLIT_LIMIT_BYTES" ]; then
+                    if ! jw_concat_group "$list" "$SEGDIR/p${part_n}.mp4"; then
+                        ok=0
+                        break
+                    fi
+                    part_n=$((part_n + 1))
+                    group_bytes=0
+                    : > "$list"
+                fi
+                printf "file '%s'\n" "$f" >> "$list"
+                group_bytes=$((group_bytes + sz))
+            done
+            # The final group has no successor to trigger the flush above.
+            if [ "$ok" = "1" ] && [ "$group_bytes" -gt 0 ]; then
+                if jw_concat_group "$list" "$SEGDIR/p${part_n}.mp4"; then
+                    part_n=$((part_n + 1))
+                else
+                    ok=0
+                fi
+            fi
+            parts_made=$((part_n - 1))
+
+            if [ "$ok" = "1" ] && [ "$parts_made" -gt "$SPLIT_MAX_PARTS" ]; then
+                ok=0
+            fi
+
+            # Verify what was actually written, not what the loop believes it
+            # wrote: every part present and non-empty, none over the limit, and
+            # the set accounting for the whole file.
+            if [ "$ok" = "1" ]; then
+                built_bytes=0
+                i=1
+                while [ "$i" -le "$parts_made" ]; do
+                    if [ ! -s "$SEGDIR/p${i}.mp4" ]; then
+                        ok=0
+                        break
+                    fi
+                    sz=$(($(wc -c < "$SEGDIR/p${i}.mp4")))
+                    if [ "$sz" -gt "$SPLIT_LIMIT_BYTES" ]; then
+                        echo "leaf-record-convert: part $i of $(basename "$BASE") came out over the limit" >&2
+                        ok=0
+                        break
+                    fi
+                    built_bytes=$((built_bytes + sz))
+                    i=$((i + 1))
+                done
+                if [ "$ok" = "1" ] && \
+                   [ "$(awk -v b="$built_bytes" -v w="$whole_bytes" 'BEGIN{print (b < w * 0.97)}')" = "1" ]; then
+                    echo "leaf-record-convert: parts of $(basename "$BASE") hold only $((built_bytes * 100 / whole_bytes))%, keeping one file" >&2
+                    ok=0
+                fi
+            fi
+
+            if [ "$ok" = "1" ]; then
+                rm -f "${BASE}"-part*.mp4
+                i=1
+                while [ "$i" -le "$parts_made" ]; do
+                    mv "$SEGDIR/p${i}.mp4" "${BASE}-part${i}.mp4" || { ok=0; break; }
+                    i=$((i + 1))
+                done
+                if [ "$ok" = "1" ]; then
+                    SPLIT_DONE=1
+                    rm -f "$TMP"
+                    sync
+                    echo "leaf-record-convert: $(basename "$BASE") split into $parts_made parts"
+                else
+                    rm -f "${BASE}"-part*.mp4
+                    echo "leaf-record-convert: could not place parts for $(basename "$BASE"), keeping one file" >&2
+                fi
+            fi
         fi
-        rm -rf "$SEGDIR"
-    else
-        echo "leaf-record-convert: could not read duration for $(basename "$BASE"), keeping one file" >&2
     fi
+
+    [ "$SPLIT_DONE" = "1" ] || [ "$ok" = "1" ] || \
+        echo "leaf-record-convert: split failed for $(basename "$BASE"), keeping one file" >&2
+    rm -rf "$SEGDIR"
 fi
 
 if [ "$SPLIT_DONE" = "0" ]; then
