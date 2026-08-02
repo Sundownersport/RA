@@ -200,12 +200,16 @@ apply_named_patch() {
             patch_path="$REPO_ROOT/patches/mlp1/0005-record-scale-clamp.patch"
             patch_label="mlp1/$(basename "$patch_path")"
             ;;
+        record-indicator)
+            patch_path="$REPO_ROOT/patches/mlp1/0006-recording-indicator.patch"
+            patch_label="mlp1/$(basename "$patch_path")"
+            ;;
         "")
             return 0
             ;;
         *)
             echo "unknown MLP1 patch set entry: $name" >&2
-            echo "known entries: portrait-rotation, command-menu, jawaka-load-content, controller-bindings, record-scale-clamp" >&2
+            echo "known entries: portrait-rotation, command-menu, jawaka-load-content, controller-bindings, record-scale-clamp, record-indicator" >&2
             exit 1
             ;;
     esac

@@ -1,0 +1,138 @@
+Show an on-screen indicator while a recording is running.
+
+Upstream gives no visual sign that recording is active. CMD_EVENT_RECORDING_TOGGLE
+calls RECORD_INIT or RECORD_DEINIT and neither pushes a message; record_driver.c
+contains no runloop_msg_queue_push at all, and MSG_RECORDING_TO -- the one string
+that sounds like a notification -- is used only inside RARCH_LOG. There is no
+notification_show_recording setting because there is nothing to gate. So the only
+evidence a recording is running is a line in a log file, which on a handheld with
+no tally light leaves no way to answer "am I still recording?".
+
+Drawn inside gfx_widgets_frame rather than as a compositor overlay, and that is the
+whole point of doing it here. The alternative was a second Wayland surface from our
+own OSD process, but a permanently mapped surface can cost the compositor its
+direct-scanout path and force full GPU composition of every frame -- a real cost on
+this Mali G52, and it would appear as the game running worse for the entire length
+of a recording. Inside this pass it is one quad in a render that already happens.
+
+It does not appear in the recording. Capture taps the core framebuffer before this
+pass, which is the same reason shaders are not captured.
+
+Sized from simple_widget_height so it follows the widget scale rather than being a
+fixed pixel size that looks wrong on a 940x720 panel, and placed top left because
+the status text (FPS, framecount, memory) already owns the top right. It pulses on
+a triangle wave off the frame counter so it reads as active rather than as a dead
+pixel, with no wall-clock dependency and no float math beyond one divide.
+
+Round, and drawn as horizontal scanlines because gfx_display_draw_quad is the only
+primitive available here: there is no circle or polygon helper, and the widget icon
+set is functional glyphs (pause, rewind, check) with no plain disc, so a texture
+would add a runtime dependency on asset PNGs being installed. One quad per row, so
+a 16px dot is 16 tiny quads. The rows deliberately do not overlap -- overlapping
+alpha would compound and blotch the edges.
+
+diff --git a/gfx/gfx_widgets.c b/gfx/gfx_widgets.c
+index 17d4b94189..0cdc0e93a5 100644
+--- a/gfx/gfx_widgets.c
++++ b/gfx/gfx_widgets.c
+@@ -38,6 +38,7 @@
+ #include "../configuration.h"
+ #include "../file_path_special.h"
+ #include "../msg_hash.h"
++#include "../record/record_driver.h"
+ 
+ #include "../tasks/task_content.h"
+ #include "../tasks/tasks_internal.h"
+@@ -1688,6 +1689,92 @@ void gfx_widgets_frame(void *data)
+    }
+ #endif
+ 
++   /* Recording indicator (Leaf).
++    *
++    * Upstream has no on-screen sign that a recording is running: the toggle
++    * calls RECORD_INIT/RECORD_DEINIT and neither pushes a message, so the only
++    * evidence is a line in the log. On a handheld with no tally light that
++    * leaves no way to answer "am I still recording?".
++    *
++    * Drawn here rather than as a compositor overlay on purpose. A second
++    * permanently-mapped Wayland surface can cost the compositor its
++    * direct-scanout path and force full GPU composition of every frame, which
++    * would slow the game down for the whole recording. Inside this pass it is
++    * one quad in a render that already runs.
++    *
++    * It does NOT appear in the clip: recording taps the core framebuffer before
++    * this pass, which is the same reason shaders are not captured.
++    *
++    * Sized from simple_widget_height so it follows the widget scale instead of
++    * being a fixed pixel size that is wrong on a small panel, and placed top
++    * left because the status text (FPS, memory) owns the top right.
++    *
++    * Round, and built from horizontal scanlines because gfx_display_draw_quad is
++    * the only primitive available here -- there is no circle or polygon helper,
++    * and the widget icon set is functional glyphs (pause, rewind, check) with no
++    * plain disc, so using a texture would add a runtime dependency on asset PNGs
++    * being installed. One quad per row, so a ~16px dot costs 16 tiny quads; the
++    * rows do not overlap, which matters because overlapping alpha would compound
++    * and blotch the edges. */
++   {
++      recording_state_t *rec_st = recording_state_get_ptr();
++
++      if (rec_st && rec_st->enable)
++      {
++         static float rec_dot_color[16] = COLOR_HEX_TO_FLOAT(ICON_COLOR_RED, 1.0f);
++         unsigned dot_size              = p_dispwidget->simple_widget_height / 3;
++         unsigned dot_pad               = p_dispwidget->simple_widget_padding;
++         /* Pulse so it reads as active rather than as a dead pixel or a stuck
++          * overlay. Triangle wave off the frame counter: no float math beyond a
++          * divide, and no dependency on wall-clock time. ~2s at 60fps. */
++         unsigned phase                 = (unsigned)(p_dispwidget->gfx_widgets_frame_count % 120);
++         float pulse                    = (phase < 60)
++            ? ((float)phase / 60.0f)
++            : ((float)(120 - phase) / 60.0f);
++         float radius;
++         unsigned row;
++
++         if (dot_size < 6)
++            dot_size = 6;
++
++         radius = (float)dot_size / 2.0f;
++
++         gfx_display_set_alpha(rec_dot_color, 0.35f + (0.65f * pulse));
++
++         for (row = 0; row < dot_size; row++)
++         {
++            /* Row centre relative to the circle centre, then the chord half-width
++             * at that height. +0.5 samples the middle of the row rather than its
++             * top edge, which keeps the top and bottom rows symmetric. */
++            float dy      = ((float)row + 0.5f) - radius;
++            float inside  = (radius * radius) - (dy * dy);
++            float half_w;
++            unsigned w;
++
++            if (inside <= 0.0f)
++               continue;
++
++            half_w = (float)sqrt((double)inside);
++            w      = (unsigned)((half_w * 2.0f) + 0.5f);
++
++            if (w == 0)
++               continue;
++
++            gfx_display_draw_quad(
++                  p_disp,
++                  userdata,
++                  video_width, video_height,
++                  (int)((float)dot_pad + radius - half_w),
++                  (int)(dot_pad + row),
++                  w, 1,
++                  video_width, video_height,
++                  rec_dot_color,
++                  NULL
++                  );
++         }
++      }
++   }
++
+    /* Status Text (FPS, framecount, memory, core status message) */
+    if (     fps_show
+          || framecount_show
