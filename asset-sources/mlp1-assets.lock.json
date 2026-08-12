@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "bundle_id": "mlp1-retroarch-assets",
+  "platform": "mlp1",
+  "source": {
+    "id": "libretro-retroarch-assets",
+    "source": "https://github.com/libretro/retroarch-assets.git",
+    "commit": "6a1bbdeff5bca537a5712e2226a2aeeaee211fd0",
+    "tree": "f0fa39ee73844caecd8c2acd945e0a58436b4125",
+    "commit_epoch": 1786220003,
+    "checkout": "workdir/src/retroarch-assets",
+    "license_path": "COPYING",
+    "license_evidence_text": "Attribution 4.0 International"
+  },
+  "subtrees": [
+    {
+      "source_root": "ozone",
+      "output_root": "ozone",
+      "exclude": [
+        "png/icons"
+      ],
+      "reason": "Ozone's own assets: panel sprites, per-theme check/switch/cursor art, sidebar tab icons, and the Inter UI faces that both Ozone (menu/drivers/ozone.c:9603,9632) and the on-screen notification layer (gfx/gfx_widgets.c:805-812) load. png/icons is the 46x46 low-DPI alternate icon set that only WIIU and VITA read (file_path_special.c:335-343); on Linux the icon path resolves to xmb/monochrome/png instead, so those 781 files are 3.1 MB of dead weight."
+    },
+    {
+      "source_root": "xmb/monochrome",
+      "output_root": "xmb/monochrome",
+      "exclude": [],
+      "reason": "Ozone's icon source on every non-WIIU/VITA platform: APPLICATION_SPECIAL_DIRECTORY_ASSETS_OZONE_ICONS resolves to assets/xmb/monochrome/png (file_path_special.c:340-344). Missing icons clear OZONE_FLAG_HAS_ALL_ASSETS and trip the missing-assets warning. font.ttf and README.md come along because the theme's own face is one file and it makes the XMB and GLUI drivers -- both compiled into our binary -- usable for anyone who selects them."
+    },
+    {
+      "source_root": "pkg",
+      "output_root": "pkg",
+      "exclude": [
+        "wiiu"
+      ],
+      "reason": "The per-language fallback faces Ozone, MaterialUI and gfx_widgets select by exact filename when user_language is set (ozone.c:9584-9640, gfx_widgets.c:814-831, file_path_special.c:384-402), plus osd-font.ttf, which the FreeType renderer searches for as its last-resort default (gfx/drivers_font_renderer/freetype.c:393,418) and the menu screensaver names directly. pkg/wiiu is WIIU packaging art."
+    }
+  ],
+  "license_rules": [
+    {
+      "match": "ozone/*.ttf",
+      "spdx": "OFL-1.1",
+      "work": "Inter UI",
+      "notice": "Copyright 2018 The Inter UI project authors. Merged with the XMB menu font (M+ P Type-1) per ozone/README.md."
+    },
+    {
+      "match": "xmb/monochrome/font.ttf",
+      "spdx": "LicenseRef-M-Plus-Free",
+      "work": "M+ 1p",
+      "notice": "Copyright (c) 2016 M+ FONTS PROJECT. M+ Free License: free use, copying and redistribution, with or without modification, including commercially, without warranty."
+    },
+    {
+      "match": "pkg/chinese-fallback-font.ttf",
+      "spdx": "Apache-2.0",
+      "work": "Droid Sans Fallback",
+      "notice": "Digitized data copyright Google Corporation (c) 2006. Licensed under the Apache License, Version 2.0."
+    },
+    {
+      "match": "pkg/korean-fallback-font.ttf",
+      "spdx": "OFL-1.1",
+      "work": "Spoqa Han Sans",
+      "notice": "Custom face based on Noto Sans and Lato, released under an open font license."
+    },
+    {
+      "match": "pkg/fallback-font.ttf",
+      "spdx": "LicenseRef-Bitstream-Vera",
+      "work": "DejaVu Sans",
+      "notice": "Copyright (c) 2003 Bitstream, Inc. DejaVu changes are in the public domain. Full permission notice ships in the font's own licence name record."
+    },
+    {
+      "match": "pkg/thai-fallback-font.ttf",
+      "spdx": "LicenseRef-Bitstream-Vera",
+      "work": "Waree",
+      "notice": "Thai Linux Working Group. Latin glyphs from Bitstream Vera, copyright (c) 2003 Bitstream, Inc.; TLWG changes are in the public domain."
+    },
+    {
+      "match": "pkg/osd-font.ttf",
+      "spdx": "LicenseRef-Bitstream-Vera",
+      "work": "DejaVu Sans Mono",
+      "notice": "Copyright (c) 2003 Bitstream, Inc. DejaVu changes are in the public domain."
+    },
+    {
+      "match": "**/*.png",
+      "spdx": "CC-BY-4.0",
+      "work": "RetroArch menu artwork",
+      "notice": "libretro team and contributors, per the retroarch-assets COPYING (Creative Commons Attribution 4.0 International)."
+    },
+    {
+      "match": "**/*.md",
+      "spdx": "CC-BY-4.0",
+      "work": "RetroArch menu artwork documentation",
+      "notice": "libretro team and contributors, per the retroarch-assets COPYING."
+    },
+    {
+      "match": "pkg/*.txt",
+      "spdx": "CC-BY-4.0",
+      "work": "RetroArch bundled font provenance notes",
+      "notice": "libretro team and contributors, per the retroarch-assets COPYING."
+    }
+  ],
+  "required_files": [
+    "ozone/regular.ttf",
+    "ozone/bold.ttf",
+    "ozone/png/cursor_border.png",
+    "ozone/png/dark/check.png",
+    "ozone/png/dark/switch.png",
+    "ozone/png/light/check.png",
+    "ozone/png/sidebar/retroarch.png",
+    "ozone/png/sidebar/settings.png",
+    "xmb/monochrome/png/default.png",
+    "pkg/chinese-fallback-font.ttf",
+    "pkg/korean-fallback-font.ttf",
+    "pkg/fallback-font.ttf",
+    "pkg/osd-font.ttf"
+  ]
+}
