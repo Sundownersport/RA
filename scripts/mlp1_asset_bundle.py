@@ -206,7 +206,14 @@ def prepare_source_locked(checkout: Path, source: dict[str, Any], fetch: bool) -
         cloned = True
     if not (checkout / ".git").exists():
         raise BundleError(f"asset source is not a Git checkout: {checkout}")
-    if not cloned and run_git(checkout, "status", "--porcelain"):
+    # A --no-checkout clone carries an empty index until materialize_subtrees()
+    # asks for the sparse roots by name, so every tracked path reads as a staged
+    # deletion. That is the expected state for a treeless clone rather than a
+    # dirty tree, and it outlives the run that created it -- the guards below
+    # have to skip it or the first build on any clean machine fails. Cleanliness
+    # is verified once the tree actually holds files, in materialize_subtrees().
+    unmaterialized = not run_git(checkout, "ls-files")
+    if not cloned and not unmaterialized and run_git(checkout, "status", "--porcelain"):
         raise BundleError(f"asset source checkout has local changes: {checkout}")
 
     commit = str(source["commit"])
@@ -222,7 +229,8 @@ def prepare_source_locked(checkout: Path, source: dict[str, Any], fetch: bool) -
         run_git(checkout, "fetch", "origin", commit)
     if run_git(checkout, "rev-parse", "HEAD") != commit:
         run_git(checkout, "checkout", "--detach", "--quiet", commit)
-    if run_git(checkout, "status", "--porcelain"):
+        unmaterialized = not run_git(checkout, "ls-files")
+    if not unmaterialized and run_git(checkout, "status", "--porcelain"):
         raise BundleError(f"asset source checkout has local changes: {checkout}")
     if run_git(checkout, "rev-parse", "HEAD") != commit:
         raise BundleError("asset checkout did not resolve to the locked commit")
@@ -264,6 +272,11 @@ def materialize_subtrees(checkout: Path, lock: dict[str, Any]) -> None:
             raise BundleError(
                 f"subtree is absent at the locked commit: {root}"
             )
+    # Now that the sparse roots hold files, a dirty tree is meaningful again:
+    # collect_files() reads the working tree, so anything edited or dropped in
+    # beside the pinned assets would otherwise be bundled as if it were locked.
+    if run_git(checkout, "status", "--porcelain"):
+        raise BundleError(f"asset source checkout has local changes: {checkout}")
 
 
 def classify(relative: PurePosixPath, rules: list[dict[str, Any]]) -> dict[str, str]:
