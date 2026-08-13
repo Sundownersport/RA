@@ -174,6 +174,35 @@ class ShaderBundleTests(unittest.TestCase):
                 (source.parent / ".source.shader-bundle.lock").exists()
             )
 
+    def test_fresh_no_checkout_clone_populates_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            remote = root / "remote"
+            remote.mkdir()
+            self.git(remote, "init", "--quiet")
+            self.git(remote, "config", "user.email", "tests@example.com")
+            self.git(remote, "config", "user.name", "Shader Bundle Tests")
+            (remote / "fixture.glsl").write_text("// shader\n", encoding="utf-8")
+            self.git(remote, "add", "fixture.glsl")
+            self.git(remote, "commit", "--quiet", "-m", "fixture")
+            source_lock = {
+                "source": str(remote),
+                "commit": self.git(remote, "rev-parse", "HEAD"),
+                "tree": self.git(remote, "rev-parse", "HEAD^{tree}"),
+                "commit_epoch": int(
+                    self.git(remote, "show", "-s", "--format=%ct", "HEAD")
+                ),
+            }
+            checkout = root / "checkout"
+
+            shader_bundle.prepare_source(checkout, source_lock, True)
+
+            self.assertEqual(
+                (checkout / "fixture.glsl").read_text(encoding="utf-8"),
+                "// shader\n",
+            )
+            self.assertEqual(self.git(checkout, "status", "--porcelain"), "")
+
     def test_rejects_missing_dependency(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             source = Path(temporary)
