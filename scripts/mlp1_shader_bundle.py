@@ -535,7 +535,7 @@ def prepare_source_locked(source: Path, lock: dict[str, Any], fetch: bool) -> No
         if not fetch:
             raise BundleError(f"locked shader commit is absent locally: {commit}")
         run_git(source, "fetch", "--depth=1", "origin", commit)
-    if run_git(source, "rev-parse", "HEAD") != commit:
+    if cloned or run_git(source, "rev-parse", "HEAD") != commit:
         run_git(source, "checkout", "--detach", "--quiet", commit)
     if run_git(source, "status", "--porcelain"):
         raise BundleError(f"shader source checkout has local changes: {source}")
