@@ -53,9 +53,29 @@ make adb-stage-pak-mlp1
 Preferred device staging is from `../Leaf`:
 
 ```sh
-make -C ../Leaf stage-retroarch DEVICE=mlp1      # binary + cores + info + shaders
+make -C ../Leaf stage-retroarch DEVICE=mlp1      # binary + cores + info + shaders + assets
 make -C ../Leaf stage-app APP=retroarch-builds DEVICE=mlp1
 ```
+
+Build and validate the pinned MLP1 menu asset bundle:
+
+```sh
+make test-assets-mlp1
+make assets-mlp1
+make validate-assets-mlp1
+```
+
+RetroArch resolves every menu asset it draws under a single `assets_directory`:
+Ozone's sprites, the icon set it shares with XMB and GLUI, the TTF faces the
+menu and the on-screen notification layer render with, and the per-language
+CJK fallback faces. Without them Ozone has no icons and RetroArch falls back to
+its built-in 8x8 ASCII bitmap font, which cannot draw CJK at all. The bundle is
+generated under `output/mlp1/assets/` from a pinned commit of
+`libretro/retroarch-assets`, pruned to what our binary actually reads
+(`asset-sources/mlp1-assets.lock.json` records the subtrees and why). Its
+manifest carries a SHA-256 and a license classification for every file; a new
+upstream file that matches no license rule fails the build rather than
+shipping unclassified.
 
 Build and validate the pinned MLP1 GLSL shader bundle:
 
