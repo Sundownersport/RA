@@ -1,0 +1,45 @@
+# Allwinner H700 (Anbernic RG XX line) RetroArch builder.
+#
+# Ubuntu 20.04 on purpose: BaseOS keeps the stock Anbernic glibc (it harvests
+# it out of the stock image rather than shipping its own), so the binary has to
+# stay on the old floor. glibc 2.31 here matches ra64.universal, which is known
+# to run on these devices. A native ubuntu-24.04-arm runner would be faster to
+# build on but would raise the floor to glibc 2.39 and stop loading.
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Configure multiarch for arm64 cross-compilation
+RUN dpkg --add-architecture arm64 && \
+    sed -i 's/^deb http/deb [arch=amd64] http/g' /etc/apt/sources.list && \
+    echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc-aarch64-linux-gnu \
+    g++-aarch64-linux-gnu \
+    pkg-config \
+    git \
+    ca-certificates \
+    python3 \
+    libsdl2-dev:arm64 \
+    libasound2-dev:arm64 \
+    libfreetype6-dev:arm64 \
+    libgles2-mesa-dev:arm64 \
+    libegl1-mesa-dev:arm64 \
+    libudev-dev:arm64 \
+    kmod \
+    && rm -rf /var/lib/apt/lists/*
+
+# No libvulkan-dev: this target builds --disable-vulkan (Mali-G31 fbdev blob
+# has no Vulkan driver). The Mesa EGL/GLES headers above are enough for the
+# fbdev_mali context - it declares its own native_window struct rather than
+# needing the vendor's EGL headers, so no Anbernic sysroot is required.
+
+COPY build-h700.sh /build-h700.sh
+RUN chmod +x /build-h700.sh
+COPY patches/ /patches/
+
+WORKDIR /build
+ENTRYPOINT ["/build-h700.sh"]
