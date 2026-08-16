@@ -36,12 +36,19 @@ export PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig
 # ISA both target it. Kept at -O3 rather than -Ofast: the frontend's floating
 # point is audio resampling and viewport maths, where -ffast-math buys nothing
 # measurable and can shift results.
-H700_OPT="-O3 -mcpu=cortex-a53 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto -DNDEBUG"
+H700_ARCH="-mcpu=cortex-a53"
+H700_OPT="-O3 $H700_ARCH -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto -DNDEBUG"
 H700_DEFS="-DHAVE_SCREEN_ORIENTATION -DGEOMETRY_MENU_ROTATION -D_GNU_SOURCE -DHAVE_FILTERS_BUILTIN"
 
 export CFLAGS="$CFLAGS $H700_OPT $H700_DEFS"
 export CXXFLAGS="$CXXFLAGS $H700_OPT $H700_DEFS"
-export LDFLAGS="$LDFLAGS -Wl,--gc-sections -flto=auto"
+# $H700_ARCH is repeated in LDFLAGS because -flto makes the link step recompile
+# the IR against whatever target the link command names. Omitting it there
+# silently rebuilds everything for the toolchain default, losing the tuning
+# this target exists for. aarch64 tolerated the omission - nothing here sits
+# behind an optional feature - but the armhf sibling did not: see the CRC32
+# note in build-h700-32.sh.
+export LDFLAGS="$LDFLAGS $H700_ARCH -Wl,--gc-sections -flto=auto"
 
 # Configure for the H700 Anbernic XX line running under BaseOS.
 #

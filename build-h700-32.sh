@@ -35,12 +35,20 @@ export PKG_CONFIG_LIBDIR=/usr/lib/arm-linux-gnueabihf/pkgconfig
 # default (vfpv3-d16), which has no NEON at all. RetroArch appends its own
 # -mfpu=neon -marm to its hand-written NEON objects, which is correct for
 # them - that asm is ARMv7 NEON - and only affects those files.
-H700_OPT="-O3 -mcpu=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto -DNDEBUG"
+H700_ARCH="-mcpu=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard"
+H700_OPT="-O3 $H700_ARCH -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto -DNDEBUG"
 H700_DEFS="-DHAVE_SCREEN_ORIENTATION -DGEOMETRY_MENU_ROTATION -D_GNU_SOURCE -DHAVE_FILTERS_BUILTIN"
 
 export CFLAGS="$CFLAGS $H700_OPT $H700_DEFS"
 export CXXFLAGS="$CXXFLAGS $H700_OPT $H700_DEFS"
-export LDFLAGS="$LDFLAGS -Wl,--gc-sections -flto=auto"
+# $H700_ARCH must be repeated in LDFLAGS. With -flto the link step recompiles
+# the IR, and it does so against whatever target the *link* command names - so
+# omitting -mcpu here silently rebuilds everything for the toolchain default.
+# That is not theoretical: -mcpu=cortex-a53 defines __ARM_FEATURE_CRC32, which
+# switches libretro-common/encodings/encoding_crc32.c onto the __crc32b/__crc32d
+# ACLE builtins, and lto-wrapper then rejected them as "not supported for this
+# target" because the default arm target has no CRC extension.
+export LDFLAGS="$LDFLAGS $H700_ARCH -Wl,--gc-sections -flto=auto"
 
 # Configure for the H700 in 32-bit mode.
 #
