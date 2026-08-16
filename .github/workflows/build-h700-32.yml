@@ -1,0 +1,53 @@
+name: Build ra32.h700
+
+on:
+  workflow_dispatch:
+    inputs:
+      retroarch_version:
+        description: 'RetroArch version tag'
+        default: 'v1.22.2'
+  workflow_call:
+    inputs:
+      retroarch_version:
+        type: string
+        default: 'v1.22.2'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure beta release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="beta-${{ github.ref_name }}"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" \
+              --target "${{ github.ref_name }}" \
+              --title "Beta Build (${{ github.ref_name }})" \
+              --prerelease \
+              --notes "RetroArch binaries built from ${{ github.ref_name }}" \
+            || true
+
+      - name: Build Docker image
+        run: docker build -f Dockerfile.h700-32 -t ra-builder-h700-32 .
+
+      - name: Build RetroArch
+        run: |
+          mkdir -p output
+          docker run --rm \
+            -e RETROARCH_VERSION=${{ github.event.inputs.retroarch_version || 'v1.22.2' }} \
+            -v ${{ github.workspace }}/output:/output \
+            ra-builder-h700-32
+
+      - name: Upload binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mv output/retroarch output/ra32.h700
+          gh release upload "beta-${{ github.ref_name }}" output/ra32.h700 --clobber

@@ -1,0 +1,38 @@
+# Allwinner H700 (Anbernic RG XX line) 32-bit RetroArch builder.
+#
+# Ubuntu 20.04 for glibc 2.31, matching ra32.universal. This binary targets the
+# STOCK Anbernic images (Ubuntu with full 32-bit multilib), not BaseOS - BaseOS
+# harvests a single armhf library and cannot load a 32-bit RetroArch at all.
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Configure multiarch for armhf cross-compilation
+RUN dpkg --add-architecture armhf && \
+    sed -i 's/^deb http/deb [arch=amd64] http/g' /etc/apt/sources.list && \
+    echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports focal main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports focal-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc-arm-linux-gnueabihf \
+    g++-arm-linux-gnueabihf \
+    pkg-config \
+    git \
+    ca-certificates \
+    python3 \
+    libsdl2-dev:armhf \
+    libasound2-dev:armhf \
+    libfreetype6-dev:armhf \
+    libgles2-mesa-dev:armhf \
+    libegl1-mesa-dev:armhf \
+    libudev-dev:armhf \
+    kmod \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY build-h700-32.sh /build-h700-32.sh
+RUN chmod +x /build-h700-32.sh
+COPY patches/ /patches/
+
+WORKDIR /build
+ENTRYPOINT ["/build-h700-32.sh"]
