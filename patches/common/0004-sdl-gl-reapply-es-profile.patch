@@ -1,0 +1,51 @@
+diff --git a/gfx/drivers_context/sdl_gl_ctx.c b/gfx/drivers_context/sdl_gl_ctx.c
+index 5766c44..1d58fb5 100644
+--- a/gfx/drivers_context/sdl_gl_ctx.c
++++ b/gfx/drivers_context/sdl_gl_ctx.c
+@@ -58,6 +58,20 @@ typedef struct gfx_ctx_sdl_data
+ /* TODO/FIXME - static global */
+ static enum gfx_ctx_api sdl_api = GFX_CTX_OPENGL_API;
+ 
++#ifdef HAVE_SDL2
++/* SDL_Init() calls SDL_GL_ResetAttributes(), which runs between bind_api()
++ * and set_video_mode() and discards the GL attributes bind_api() set. Keep
++ * them here so set_video_mode() can re-apply them immediately before
++ * SDL_CreateWindow(), where SDL2 actually reads them. Without this the window
++ * is created with SDL's default (desktop GL) profile no matter what the video
++ * driver requested - which fails on GLES-only EGL drivers that advertise no
++ * desktop-GL config. Defaults reproduce the pre-patch behaviour if bind_api()
++ * never ran. */
++static unsigned sdl_gl_profile = SDL_GL_CONTEXT_PROFILE_COMPATIBILITY;
++static unsigned sdl_gl_major   = 0;
++static unsigned sdl_gl_minor   = 0;
++#endif
++
+ static void sdl_ctx_destroy_resources(gfx_ctx_sdl_data_t *sdl)
+ {
+    if (!sdl)
+@@ -161,6 +175,11 @@ static bool sdl_ctx_bind_api(void *data,
+ 
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, major);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, minor);
++
++   /* Remembered for set_video_mode(); see the statics above. */
++   sdl_gl_profile = profile;
++   sdl_gl_major   = major;
++   sdl_gl_minor   = minor;
+ #endif
+ 
+    sdl_api = api;
+@@ -214,6 +233,13 @@ static bool sdl_ctx_set_video_mode(void *data,
+    else
+    {
+       unsigned display          = video_monitor_index;
++
++      /* Re-apply the GL attributes bind_api() set; SDL_Init() reset them in
++       * between, and SDL2 reads them at window creation, not before. */
++      SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,  sdl_gl_profile);
++      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, sdl_gl_major);
++      SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, sdl_gl_minor);
++
+       sdl->win                  = SDL_CreateWindow("RetroArch",
+             SDL_WINDOWPOS_UNDEFINED_DISPLAY(display),
+             SDL_WINDOWPOS_UNDEFINED_DISPLAY(display),
