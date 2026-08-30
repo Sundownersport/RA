@@ -298,7 +298,7 @@ configure_flags=(
     "--disable-opengl_core"
     "--disable-kms"
     "$mali_fbdev_flag"
-    "--disable-ssl"
+    "--enable-ssl"
     "--enable-networking"
     "--enable-command"
     "--enable-sdl2"
