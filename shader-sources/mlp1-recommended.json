@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "qualification_id": "mlp1-recommended-expansion-2026-07-27",
-  "qualified_at": "2026-07-27",
+  "qualification_id": "mlp1-recommended-lockbump-2026-09-01",
+  "qualified_at": "2026-09-01",
   "platform": "mlp1",
   "device": {
     "model": "Miniloong Pocket 1",
@@ -14,23 +14,31 @@
     "graphics_api": "OpenGL ES 3.2"
   },
   "retroarch_build": {
-    "version": "v1.22.2",
-    "commit": "69a4f0ea1e8aaf442ae4858f2e7f2b31a1776576",
+    "binary_sha256": "30a09fbe957c056141315e03e3b11fe559dfeff00a092ea7bca982d3ab63a1fd",
     "build_profile": "release",
-    "binary_sha256": "6af9c88c4e9ab83b2962d283a000a4edcf8fdf5a55364d4e4ae1950c41504aff"
+    "commit": "69a4f0ea1e8aaf442ae4858f2e7f2b31a1776576",
+    "patches_applied": [
+      "common/0002-portrait-panel-landscape-rotation.patch",
+      "mlp1/0001-command-menu-commands.patch",
+      "mlp1/0002-jawaka-load-content-command.patch",
+      "mlp1/0003-controller-only-bindings-ui.patch",
+      "mlp1/0005-record-scale-clamp.patch",
+      "mlp1/0006-recording-indicator.patch"
+    ],
+    "version": "v1.22.2"
   },
   "shader_source": {
     "url": "https://github.com/libretro/glsl-shaders.git",
-    "commit": "2b2c5ee3fd8e1a3884e20ed424fd9bfbc51cbb3d",
-    "tree": "75d2a0d9e072b912f3479587bb1b4bcd1b55d510"
+    "commit": "235448f244bf676d135f7b25ea6b8e1eae41c4e4",
+    "tree": "51909b8ac493de1b870e07b4dd76a64661feaac1"
   },
   "shader_sources": [
     {
       "id": "libretro-glsl-shaders",
       "url": "https://github.com/libretro/glsl-shaders.git",
-      "commit": "2b2c5ee3fd8e1a3884e20ed424fd9bfbc51cbb3d",
-      "tree": "75d2a0d9e072b912f3479587bb1b4bcd1b55d510",
-      "commit_epoch": 1780511317
+      "commit": "235448f244bf676d135f7b25ea6b8e1eae41c4e4",
+      "tree": "51909b8ac493de1b870e07b4dd76a64661feaac1",
+      "commit_epoch": 1788106747
     },
     {
       "id": "pt-skywalker541",
@@ -403,6 +411,119 @@
       "constraints": [
         "Keep BFI off: PS1 at 120Hz with BFI measured 50.282 FPS.",
         "CRT effects reduce brightness; the preset uses a milder mask and scanline strength than upstream defaults."
+      ]
+    },
+    {
+      "path": "leaf-recommended/lcd-grid.glslp",
+      "display_name": "LCD Grid",
+      "description": "Adds the fine RGB pixel grid of a handheld LCD panel.",
+      "reference": "leaf-bundled/handheld/lcd3x.glslp",
+      "parameters": {},
+      "intended_systems": [
+        "GB",
+        "GBC",
+        "GBA"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 4,
+        "minimum_average_fps": 59.963,
+        "maximum_frame_time_p95_ms": 21.573,
+        "maximum_dropped_frames_during_sample_window": 74,
+        "maximum_audio_underrun_pct": 0.696
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture capture per preset, plus the real-content captures from every performance case (RetroArch statistics overlay present in those). Checked for correct geometry, no artifacts, and the intended effect; not a considered aesthetic review of each system."
+      },
+      "constraints": [
+        "Designed for handheld content; the grid is very fine at console resolutions.",
+        "120Hz cadence counters can report periodic drops for nominal 60fps content."
+      ]
+    },
+    {
+      "path": "leaf-recommended/lcd-grid-fast.glslp",
+      "display_name": "LCD Grid Fast",
+      "description": "A lighter handheld LCD grid with softer cell edges.",
+      "reference": "leaf-bundled/handheld/zfast-lcd.glslp",
+      "parameters": {},
+      "intended_systems": [
+        "GB",
+        "GBC",
+        "GBA"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 4,
+        "minimum_average_fps": 59.948,
+        "maximum_frame_time_p95_ms": 21.436,
+        "maximum_dropped_frames_during_sample_window": 75,
+        "maximum_audio_underrun_pct": 0.587
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture capture per preset, plus the real-content captures from every performance case (RetroArch statistics overlay present in those). Checked for correct geometry, no artifacts, and the intended effect; not a considered aesthetic review of each system."
+      },
+      "constraints": [
+        "Designed for handheld content.",
+        "120Hz cadence counters can report periodic drops for nominal 60fps content."
+      ]
+    },
+    {
+      "path": "leaf-recommended/crt-sharp.glslp",
+      "display_name": "CRT Sharp",
+      "description": "Scanlines and an aperture mask with a flat screen and crisp scaling.",
+      "reference": "leaf-bundled/crt/zfast-crt.glslp",
+      "parameters": {},
+      "intended_systems": [
+        "FC",
+        "SFC",
+        "PS"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 4,
+        "minimum_average_fps": 60.031,
+        "maximum_frame_time_p95_ms": 21.118,
+        "maximum_dropped_frames_during_sample_window": 60,
+        "maximum_audio_underrun_pct": 0.515
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture capture per preset, plus the real-content captures from every performance case (RetroArch statistics overlay present in those). Checked for correct geometry, no artifacts, and the intended effect; not a considered aesthetic review of each system."
+      },
+      "constraints": [
+        "No screen curvature; use CRT Curved for that.",
+        "120Hz cadence counters can report periodic drops for nominal 60fps content."
+      ]
+    },
+    {
+      "path": "leaf-recommended/crt-curved.glslp",
+      "display_name": "CRT Curved",
+      "description": "Scanlines and aperture mask with screen curvature, rounded corners and vignetting.",
+      "reference": "leaf-bundled/crt/zfast_crt_geo.glslp",
+      "parameters": {},
+      "intended_systems": [
+        "FC",
+        "SFC",
+        "PS"
+      ],
+      "qualification": "recommended",
+      "performance": {
+        "case_count": 4,
+        "minimum_average_fps": 60.035,
+        "maximum_frame_time_p95_ms": 21.273,
+        "maximum_dropped_frames_during_sample_window": 53,
+        "maximum_audio_underrun_pct": 0.852
+      },
+      "visual_review": {
+        "status": "pass",
+        "content": "CC0 color-grid/text fixture capture per preset, plus the real-content captures from every performance case (RetroArch statistics overlay present in those). Checked for correct geometry, no artifacts, and the intended effect; not a considered aesthetic review of each system."
+      },
+      "constraints": [
+        "Curvature crops slightly at the screen edges.",
+        "Carries a Leaf local patch until upstream fixes its GLSL ES precision mismatch.",
+        "120Hz cadence counters can report periodic drops for nominal 60fps content."
       ]
     }
   ]

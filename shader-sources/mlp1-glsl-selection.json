@@ -119,6 +119,202 @@
       "group": "crt-advanced",
       "recommendation_status": "excluded-performance",
       "recommendation_reason": "Loads safely but measured 34.017 FPS on the lightweight CC0 fixture at 60 Hz."
+    },
+    {
+      "path": "crt/zfast_crt_geo.glslp",
+      "license": "GPL-2.0-or-later",
+      "license_provenance": "Embedded GPL notice in crt/shaders/zfast_crt_geo.glsl",
+      "license_evidence_path": "crt/shaders/zfast_crt_geo.glsl",
+      "license_evidence_text": "GNU General Public License",
+      "qualification": "recommended",
+      "group": "crt-advanced"
+    },
+    {
+      "path": "handheld/lcd3x.glslp",
+      "license": "LicenseRef-Public-Domain",
+      "license_provenance": "Embedded public-domain notice in handheld/shaders/lcd3x.glsl",
+      "license_evidence_path": "handheld/shaders/lcd3x.glsl",
+      "license_evidence_text": "License: Public domain",
+      "qualification": "recommended",
+      "group": "handheld-lcd"
+    },
+    {
+      "path": "handheld/zfast-lcd.glslp",
+      "license": "GPL-2.0-or-later",
+      "license_provenance": "Embedded GPL notice in handheld/shaders/zfast_lcd.glsl",
+      "license_evidence_path": "handheld/shaders/zfast_lcd.glsl",
+      "license_evidence_text": "GNU General Public License",
+      "qualification": "recommended",
+      "group": "handheld-lcd"
+    },
+    {
+      "path": "crt/zfast-crt.glslp",
+      "license": "GPL-2.0-or-later",
+      "license_provenance": "Embedded GPL notice in crt/shaders/zfast_crt.glsl",
+      "license_evidence_path": "crt/shaders/zfast_crt.glsl",
+      "license_evidence_text": "GNU General Public License",
+      "qualification": "recommended",
+      "group": "crt-advanced"
+    },
+    {
+      "path": "crt/zfast-composite.glslp",
+      "license": "GPL-2.0-or-later",
+      "license_provenance": "Embedded GPL notice in crt/shaders/zfast_crt_composite.glsl. Its second pass dependency crt/shaders/crt-consumer/linearize.glsl carries no notice of its own and the upstream repo has no LICENSE file; it is treated as part of the GPL-2.0-or-later crt-consumer work by DariusG, whose sibling files (crt-consumer.glsl, linear.glsl, glow_x/glow_y.glsl, ntsc_module.glsl) all carry that notice. Decision recorded 2026-09-01 in RetroArch decision 0010.",
+      "license_evidence_path": "crt/shaders/zfast_crt_composite.glsl",
+      "license_evidence_text": "GNU General Public License",
+      "qualification": "loads",
+      "group": "crt-advanced"
+    }
+  ],
+  "patches": [
+    {
+      "id": "zfast-crt-geo-precision",
+      "source_id": "libretro-glsl-shaders",
+      "path": "crt/shaders/zfast_crt_geo.glsl",
+      "patch_file": "shader-sources/patches/zfast_crt_geo-precision.patch",
+      "pre_sha256": "c0a52a3d1cc6ad380ba62524b9607d9a3eee1b08df61537ed9530a79e755a0c4",
+      "post_sha256": "f4723f329f20fa331da901d4c95d84638e750c8ac7ebf1ebd9156131a6e61b4c",
+      "reason": "GLSL ES link failure on Mali-G52: TextureSize is mediump in the vertex stage and highp in the fragment stage. Raises the vertex stage to highp under GL_FRAGMENT_PRECISION_HIGH, byte-for-byte the change upstream commit 8aab130 applied to the sibling shaders zfast_crt.glsl and zfast_crt_nogeo.glsl.",
+      "upstream_status": "not yet submitted; upstream c6c8fad (#563) introduced the mismatch in six shaders and 8aab130 fixed two of them, leaving this one. Drop this patch once upstream carries the same change."
+    }
+  ],
+  "license_acknowledgements": [
+    {
+      "path_prefix": "crt/shaders/crt-consumer/",
+      "license": "GPL-2.0-or-later",
+      "reason": "The crt-consumer shader by DariusG (2022-2024) is one coherent work whose files carry no consistent per-file header: of its ten shaders six declare GPL-2.0-or-later (crt-consumer.glsl, crt-consumer-arcade.glsl, linear.glsl, glow_x.glsl, glow_y.glsl, ntsc_module.glsl) and four declare nothing (crt-consumer-1w.glsl, crt-consumer-classic.glsl, linearize.glsl, resolve.glsl). None declares version 3, so there is no conflict inside the work. The upstream repository has no LICENSE file, so an unlabelled file has no statement anywhere; these are treated as part of the surrounding GPL-2.0-or-later work. Recorded as RetroArch decision 0010.",
+      "decision": "0010"
+    }
+  ],
+  "released_aliases": [
+    {
+      "path": "leaf-recommended/crt-curved.glslp",
+      "reference": "leaf-bundled/crt/zfast_crt_geo.glslp",
+      "parameters": {},
+      "released_in": "2026-09-01"
+    },
+    {
+      "path": "leaf-recommended/crt-lite.glslp",
+      "reference": "leaf-bundled/crt/crt-hyllian-fast.glslp",
+      "parameters": {
+        "BRIGHTBOOST": "1.4",
+        "MASK_INTENSITY": "0.3",
+        "SCANLINES": "0.5",
+        "SHARPNESS": "1.0"
+      },
+      "released_in": "pre-2026-09-01"
+    },
+    {
+      "path": "leaf-recommended/crt-sharp.glslp",
+      "reference": "leaf-bundled/crt/zfast-crt.glslp",
+      "parameters": {},
+      "released_in": "2026-09-01"
+    },
+    {
+      "path": "leaf-recommended/game-boy-advance-lcd.glslp",
+      "reference": "leaf-bundled/community/pt-skywalker541/PT_SkyWalker541.glslp",
+      "parameters": {
+        "PT_BACKGROUND_TINT": "2.0",
+        "PT_BASE_TRANSPARENCY_AMOUNT": "0.25",
+        "PT_BEZEL_SHADOW_STRENGTH": "0.30",
+        "PT_DARK_COLOR_FILTER": "0.0",
+        "PT_GAP_GRID_COLOR": "0.0",
+        "PT_GAP_GRID_COLOR_INTENSITY": "0.30",
+        "PT_GRID_WIDTH": "0.08",
+        "PT_PIXEL_EFFECT": "1.0",
+        "PT_PIXEL_MODE": "0.0",
+        "PT_SHADOW_OPACITY": "0.20",
+        "PT_SYSTEM": "4.0",
+        "PT_TINT_INTENSITY": "1.0",
+        "PT_WHITE_PIXEL_MIN_TRANSPARENCY": "0.55"
+      },
+      "released_in": "pre-2026-09-01"
+    },
+    {
+      "path": "leaf-recommended/game-boy-color-lcd.glslp",
+      "reference": "leaf-bundled/community/pt-skywalker541/PT_SkyWalker541.glslp",
+      "parameters": {
+        "PT_BACKGROUND_TINT": "1.0",
+        "PT_BASE_TRANSPARENCY_AMOUNT": "0.20",
+        "PT_BEZEL_SHADOW_STRENGTH": "0.30",
+        "PT_DARK_COLOR_FILTER": "10.0",
+        "PT_GAP_GRID_COLOR": "0.0",
+        "PT_GAP_GRID_COLOR_INTENSITY": "0.30",
+        "PT_GRID_WIDTH": "0.08",
+        "PT_PIXEL_EFFECT": "1.0",
+        "PT_PIXEL_MODE": "0.0",
+        "PT_SHADOW_OPACITY": "0.30",
+        "PT_SYSTEM": "2.0",
+        "PT_TINT_INTENSITY": "1.0",
+        "PT_WHITE_PIXEL_MIN_TRANSPARENCY": "0.20"
+      },
+      "released_in": "pre-2026-09-01"
+    },
+    {
+      "path": "leaf-recommended/game-boy-lcd.glslp",
+      "reference": "leaf-bundled/community/pt-skywalker541/PT_SkyWalker541.glslp",
+      "parameters": {
+        "PT_BACKGROUND_TINT": "1.0",
+        "PT_BASE_TRANSPARENCY_AMOUNT": "0.20",
+        "PT_BEZEL_SHADOW_STRENGTH": "0.30",
+        "PT_DARK_COLOR_FILTER": "0.0",
+        "PT_GAP_GRID_COLOR": "0.0",
+        "PT_GAP_GRID_COLOR_INTENSITY": "0.30",
+        "PT_GRID_WIDTH": "0.08",
+        "PT_PIXEL_EFFECT": "1.0",
+        "PT_PIXEL_MODE": "0.0",
+        "PT_SHADOW_OPACITY": "0.30",
+        "PT_SYSTEM": "1.0",
+        "PT_TINT_INTENSITY": "1.0",
+        "PT_WHITE_PIXEL_MIN_TRANSPARENCY": "0.20"
+      },
+      "released_in": "pre-2026-09-01"
+    },
+    {
+      "path": "leaf-recommended/gba-color.glslp",
+      "reference": "leaf-bundled/handheld/gba-color.glslp",
+      "parameters": {},
+      "released_in": "pre-2026-09-01"
+    },
+    {
+      "path": "leaf-recommended/gbc-color.glslp",
+      "reference": "leaf-bundled/handheld/gbc-color.glslp",
+      "parameters": {},
+      "released_in": "pre-2026-09-01"
+    },
+    {
+      "path": "leaf-recommended/lcd-grid-fast.glslp",
+      "reference": "leaf-bundled/handheld/zfast-lcd.glslp",
+      "parameters": {},
+      "released_in": "2026-09-01"
+    },
+    {
+      "path": "leaf-recommended/lcd-grid.glslp",
+      "reference": "leaf-bundled/handheld/lcd3x.glslp",
+      "parameters": {},
+      "released_in": "2026-09-01"
+    },
+    {
+      "path": "leaf-recommended/sharp-pixels.glslp",
+      "reference": "leaf-bundled/interpolation/sharp-bilinear-simple.glslp",
+      "parameters": {},
+      "released_in": "pre-2026-09-01"
+    },
+    {
+      "path": "leaf-recommended/sharp-shimmerless.glslp",
+      "reference": "leaf-bundled/community/sharp-shimmerless/sharp-shimmerless.glslp",
+      "parameters": {},
+      "released_in": "pre-2026-09-01"
+    },
+    {
+      "path": "leaf-recommended/subtle-scanlines.glslp",
+      "reference": "leaf-bundled/scanlines/scanline-fract.glslp",
+      "parameters": {
+        "BRIGHTBOOST": "1.1",
+        "DARKNESS": "0.25",
+        "THICKNESS": "1.0"
+      },
+      "released_in": "pre-2026-09-01"
     }
   ]
 }

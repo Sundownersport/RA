@@ -4,9 +4,9 @@
     {
       "id": "libretro-glsl-shaders",
       "source": "https://github.com/libretro/glsl-shaders.git",
-      "commit": "2b2c5ee3fd8e1a3884e20ed424fd9bfbc51cbb3d",
-      "tree": "75d2a0d9e072b912f3479587bb1b4bcd1b55d510",
-      "commit_epoch": 1780511317,
+      "commit": "235448f244bf676d135f7b25ea6b8e1eae41c4e4",
+      "tree": "51909b8ac493de1b870e07b4dd76a64661feaac1",
+      "commit_epoch": 1788106747,
       "checkout": "workdir/src/glsl-shaders",
       "source_root": ".",
       "output_root": "leaf-bundled"

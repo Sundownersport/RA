@@ -1,0 +1,14 @@
+--- a/crt/shaders/zfast_crt_geo.glsl
++++ b/crt/shaders/zfast_crt_geo.glsl
+@@ -48,7 +48,11 @@
+ #endif
+ 
+ #ifdef GL_ES
++#ifdef GL_FRAGMENT_PRECISION_HIGH
++#define COMPAT_PRECISION highp
++#else
+ #define COMPAT_PRECISION mediump
++#endif
+ #else
+ #define COMPAT_PRECISION
+ #endif

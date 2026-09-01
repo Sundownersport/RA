@@ -394,6 +394,107 @@ def load_qualification_report(
     return report_path, report
 
 
+# Sized for the in-game picker's caption area on a 720x960 panel, not for prose.
+RECOMMENDATION_DESCRIPTION_MAX = 160
+RECOMMENDATION_CONSTRAINT_MAX = 160
+RECOMMENDATION_CONSTRAINTS_MAX = 6
+
+
+def load_released_aliases(
+    selection: dict[str, Any], selection_path: Path
+) -> dict[str, dict[str, Any]]:
+    """Aliases already shipped to users, pinned by reference target and tuning.
+
+    A saved automatic preset references a recommendation **by path**, so once an
+    alias is released its path, its reference target, and its parameter values
+    are API. Retuning one in place silently changes a look a user chose and
+    saved. A material change gets a new alias path instead; the old one stays
+    loadable for at least one stable release.
+    """
+    entries = selection.get("released_aliases", [])
+    if not isinstance(entries, list):
+        raise BundleError(f"{selection_path}: released_aliases must be a list")
+    released: dict[str, dict[str, Any]] = {}
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise BundleError(f"released alias {index} must be an object")
+        missing = sorted({"path", "reference", "parameters", "released_in"} - set(entry))
+        if missing:
+            raise BundleError(
+                f"released alias {index} is missing keys: {', '.join(missing)}"
+            )
+        alias = normalize_source_path(str(entry["path"])).as_posix()
+        if alias in released:
+            raise BundleError(f"duplicate released alias: {alias}")
+        if not isinstance(entry["parameters"], dict):
+            raise BundleError(f"released alias {alias}: parameters must be an object")
+        released[alias] = entry
+    return released
+
+
+def validate_released_aliases(
+    recommendations: dict[str, Any] | None,
+    released: dict[str, dict[str, Any]],
+) -> None:
+    current = {
+        normalize_source_path(str(row["path"])).as_posix(): row
+        for row in (recommendations or {}).get("presets", [])
+    }
+    for alias, entry in sorted(released.items()):
+        row = current.get(alias)
+        if row is None:
+            raise BundleError(
+                f"released alias {alias} is no longer generated. It was shipped in "
+                f"{entry['released_in']} and saved presets may still reference it; "
+                "keep it loadable for at least one stable release."
+            )
+        reference = normalize_source_path(str(row["reference"])).as_posix()
+        if reference != normalize_source_path(str(entry["reference"])).as_posix():
+            raise BundleError(
+                f"released alias {alias} changed its reference target "
+                f"({entry['reference']} -> {reference}). Introduce a new alias path "
+                "instead; users' saved presets point at this one."
+            )
+        expected = {str(k): str(v) for k, v in entry["parameters"].items()}
+        actual = {str(k): str(v) for k, v in row["parameters"].items()}
+        if expected != actual:
+            raise BundleError(
+                f"released alias {alias} changed its tuning. Introduce a new alias "
+                "path instead; users' saved presets point at this one."
+            )
+
+
+def validate_recommendation_text(
+    alias: str, description: Any, constraints: Any
+) -> None:
+    """Bound the strings the in-game picker renders.
+
+    These reach a handheld screen through a fixed buffer, so an over-long value
+    must fail the build rather than be silently truncated on device.
+    """
+    if not isinstance(description, str) or not description.strip():
+        raise BundleError(f"{alias}: description must be a non-empty string")
+    if len(description) > RECOMMENDATION_DESCRIPTION_MAX:
+        raise BundleError(
+            f"{alias}: description exceeds "
+            f"{RECOMMENDATION_DESCRIPTION_MAX} characters"
+        )
+    if not isinstance(constraints, list):
+        raise BundleError(f"{alias}: constraints must be a list")
+    if len(constraints) > RECOMMENDATION_CONSTRAINTS_MAX:
+        raise BundleError(
+            f"{alias}: more than {RECOMMENDATION_CONSTRAINTS_MAX} constraints"
+        )
+    for constraint in constraints:
+        if not isinstance(constraint, str) or not constraint.strip():
+            raise BundleError(f"{alias}: each constraint must be a non-empty string")
+        if len(constraint) > RECOMMENDATION_CONSTRAINT_MAX:
+            raise BundleError(
+                f"{alias}: a constraint exceeds "
+                f"{RECOMMENDATION_CONSTRAINT_MAX} characters"
+            )
+
+
 def load_recommendations(
     selection: dict[str, Any],
     lock: dict[str, Any],
@@ -469,6 +570,10 @@ def load_recommendations(
         referenced_source_ids.add(preset_source_id(selected_row, lock))
         if row["qualification"] != "recommended":
             raise BundleError(f"recommendation is not qualified: {alias}")
+
+        validate_recommendation_text(
+            alias.as_posix(), row["description"], row["constraints"]
+        )
         systems = row["intended_systems"]
         if not isinstance(systems, list) or not systems:
             raise BundleError(f"recommendation has no intended systems: {alias}")
@@ -704,11 +809,317 @@ def validate_bundle_path(
         raise BundleError(f"unsupported shader bundle extension {suffix!r}: {relative_path}")
 
 
+def load_patches(
+    selection: dict[str, Any],
+    selection_path: Path,
+    lock: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Validate the optional `patches` block.
+
+    A patch exists only to carry a fix Leaf needs before upstream ships it. It
+    is pinned by the sha256 of the file BEFORE and AFTER the change, so an
+    advancing source lock that touches the same file fails the build loudly
+    instead of silently mis-applying or silently no-op'ing.
+    """
+    patches = selection.get("patches", [])
+    if not isinstance(patches, list):
+        raise BundleError(f"{selection_path}: patches must be a list")
+    known_sources = {str(row["id"]) for row in locked_sources(lock)}
+    seen: set[str] = set()
+    for index, patch in enumerate(patches):
+        if not isinstance(patch, dict):
+            raise BundleError(f"patch {index} must be an object")
+        missing = sorted(
+            {
+                "id",
+                "source_id",
+                "path",
+                "patch_file",
+                "pre_sha256",
+                "post_sha256",
+                "reason",
+                "upstream_status",
+            }
+            - set(patch)
+        )
+        if missing:
+            raise BundleError(
+                f"patch {index} is missing keys: {', '.join(missing)}"
+            )
+        patch_id = str(patch["id"])
+        if patch_id in seen:
+            raise BundleError(f"duplicate patch id: {patch_id}")
+        seen.add(patch_id)
+        if str(patch["source_id"]) not in known_sources:
+            raise BundleError(f"patch {patch_id}: unknown source_id")
+        for key in ("pre_sha256", "post_sha256"):
+            digest = str(patch[key])
+            if len(digest) != 64 or any(
+                character not in "0123456789abcdef" for character in digest
+            ):
+                raise BundleError(f"patch {patch_id}: {key} must be a sha256 hex digest")
+        if str(patch["pre_sha256"]) == str(patch["post_sha256"]):
+            raise BundleError(f"patch {patch_id}: pre and post hashes are identical")
+        if not str(patch["reason"]).strip():
+            raise BundleError(f"patch {patch_id}: reason must not be empty")
+        normalize_source_path(str(patch["path"]))
+        patch_path = normalize_source_path(str(patch["patch_file"]))
+        resolved = (selection_path.parent.parent / patch_path.as_posix()).resolve()
+        try:
+            resolved.relative_to(selection_path.parent.parent.resolve())
+        except ValueError as exc:
+            raise BundleError(f"patch {patch_id}: patch_file escapes the repository") from exc
+        if not resolved.is_file():
+            raise BundleError(f"patch {patch_id}: patch file is missing: {patch_path}")
+    return patches
+
+
+def apply_unified_diff(original: bytes, diff_text: str) -> bytes:
+    """Apply a unified diff. Deliberately strict: context must match exactly.
+
+    Correctness does not rest on this function -- the caller verifies the result
+    against a pinned post-image hash -- but a strict applier fails at the hunk
+    rather than producing something that merely hashes differently.
+    """
+    newline = b"\r\n" if original.count(b"\r\n") else b"\n"
+    lines = original.split(newline)
+    diff_lines = diff_text.splitlines()
+    result = list(lines)
+    offset = 0
+    index = 0
+    while index < len(diff_lines):
+        line = diff_lines[index]
+        if not line.startswith("@@"):
+            index += 1
+            continue
+        header = re.match(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
+        if not header:
+            raise BundleError(f"malformed hunk header: {line}")
+        start = int(header.group(1)) - 1
+        index += 1
+        cursor = start + offset
+        while index < len(diff_lines) and not diff_lines[index].startswith("@@"):
+            body = diff_lines[index]
+            if body.startswith("\\"):
+                index += 1
+                continue
+            marker, text = body[:1], body[1:]
+            if marker == " ":
+                if cursor >= len(result) or result[cursor] != text.encode():
+                    raise BundleError(f"patch context mismatch at line {cursor + 1}")
+                cursor += 1
+            elif marker == "-":
+                if cursor >= len(result) or result[cursor] != text.encode():
+                    raise BundleError(f"patch removal mismatch at line {cursor + 1}")
+                del result[cursor]
+                offset -= 1
+            elif marker == "+":
+                result.insert(cursor, text.encode())
+                cursor += 1
+                offset += 1
+            elif body == "":
+                cursor += 1
+            else:
+                raise BundleError(f"unsupported patch line: {body!r}")
+            index += 1
+    return newline.join(result)
+
+
+def materialize_patches(
+    patches: list[dict[str, Any]],
+    sources: dict[str, dict[str, Any]],
+    selection_path: Path,
+    workdir: Path,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Produce patched copies keyed by (source_id, source-relative path)."""
+    applied: dict[tuple[str, str], dict[str, Any]] = {}
+    for patch in patches:
+        patch_id = str(patch["id"])
+        source_id = str(patch["source_id"])
+        relative = normalize_source_path(str(patch["path"]))
+        source = sources[source_id]
+        original_path = source["root"] / relative.as_posix()
+        if not original_path.is_file():
+            raise BundleError(f"patch {patch_id}: target is missing: {relative}")
+        original = original_path.read_bytes()
+        actual_pre = hashlib.sha256(original).hexdigest()
+        if actual_pre != str(patch["pre_sha256"]):
+            raise BundleError(
+                f"patch {patch_id}: target no longer matches pre_sha256 "
+                f"(expected {patch['pre_sha256']}, found {actual_pre}). "
+                "The source lock moved under this patch; re-check whether it is "
+                "still needed and re-pin it."
+            )
+        patch_file = (
+            selection_path.parent.parent
+            / normalize_source_path(str(patch["patch_file"])).as_posix()
+        )
+        patched = apply_unified_diff(
+            original, patch_file.read_text(encoding="utf-8")
+        )
+        actual_post = hashlib.sha256(patched).hexdigest()
+        if actual_post != str(patch["post_sha256"]):
+            raise BundleError(
+                f"patch {patch_id}: result does not match post_sha256 "
+                f"(expected {patch['post_sha256']}, produced {actual_post})"
+            )
+        destination = workdir / patch_id / relative.as_posix()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(patched)
+        applied[(source_id, relative.as_posix())] = {
+            "path": destination,
+            "patch_id": patch_id,
+            "patch_sha256": sha256_file(patch_file),
+            "pre_sha256": str(patch["pre_sha256"]),
+            "post_sha256": actual_post,
+            "reason": str(patch["reason"]),
+            "upstream_status": str(patch["upstream_status"]),
+        }
+    return applied
+
+
+# Detected from file content. "unlabelled" is not a license, it is the absence
+# of one, and it is handled separately.
+LICENSE_MARKERS: tuple[tuple[str, str], ...] = (
+    ("GPL-3.0-or-later", "version 3 of the License"),
+    ("GPL-2.0-or-later", "either version 2 of the License"),
+    ("MIT", "Permission is hereby granted, free of charge"),
+    ("LicenseRef-Public-Domain", "public domain"),
+)
+
+# A file may be redistributed under a preset's declared license when its own
+# license is at least as permissive. Keys are the file's detected license.
+# CC0-1.0 is the formal public-domain dedication; a file whose header says
+# "public domain" and a preset declaring CC0-1.0 are the same statement.
+PERMISSIVE = ("LicenseRef-Public-Domain", "CC0-1.0")
+LICENSE_COMPATIBLE_UNDER: dict[str, frozenset[str]] = {
+    "LicenseRef-Public-Domain": frozenset(
+        {*PERMISSIVE, "MIT", "GPL-2.0-or-later", "GPL-3.0-or-later"}
+    ),
+    "CC0-1.0": frozenset(
+        {*PERMISSIVE, "MIT", "GPL-2.0-or-later", "GPL-3.0-or-later"}
+    ),
+    "MIT": frozenset({"MIT", "GPL-2.0-or-later", "GPL-3.0-or-later"}),
+    "GPL-2.0-or-later": frozenset({"GPL-2.0-or-later", "GPL-3.0-or-later"}),
+    "GPL-3.0-or-later": frozenset({"GPL-3.0-or-later"}),
+}
+
+
+def detect_file_license(path: Path) -> str | None:
+    """Return the license a file declares, or None when it declares nothing."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+    folded = text.casefold()
+    for name, marker in LICENSE_MARKERS:
+        if marker.casefold() in folded:
+            return name
+    return None
+
+
+def load_license_acknowledgements(
+    selection: dict[str, Any], selection_path: Path
+) -> list[dict[str, Any]]:
+    entries = selection.get("license_acknowledgements", [])
+    if not isinstance(entries, list):
+        raise BundleError(f"{selection_path}: license_acknowledgements must be a list")
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise BundleError(f"license acknowledgement {index} must be an object")
+        missing = sorted({"path_prefix", "license", "reason"} - set(entry))
+        if missing:
+            raise BundleError(
+                f"license acknowledgement {index} is missing keys: {', '.join(missing)}"
+            )
+        if not str(entry["reason"]).strip():
+            raise BundleError(
+                f"license acknowledgement {index}: reason must not be empty"
+            )
+        normalize_source_path(str(entry["path_prefix"]))
+    return entries
+
+
+def acknowledged_license(
+    source_path: str, acknowledgements: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    for entry in acknowledgements:
+        if source_path.startswith(str(entry["path_prefix"])):
+            return entry
+    return None
+
+
+# Only source files are expected to carry a notice. A .glslp preset is a config
+# file and a .png is an asset; neither can hold one, and their licensing follows
+# the preset's declared license and its evidence path.
+NOTICE_REQUIRED_SUFFIXES = frozenset({".glsl"})
+
+
+def validate_file_licenses(
+    files: dict[PurePosixPath, dict[str, Any]],
+    acknowledgements: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    """Check every file entering the bundle against its preset's declared license.
+
+    The per-preset `license_evidence_path` check validates one file per preset.
+    This walks the whole dependency closure, which is where a silent aggregate
+    license change would otherwise come from: one v3 dependency under a v2+
+    preset relicenses the bundle and nothing would say so.
+    """
+    rows: list[dict[str, str]] = []
+    for output_relative in sorted(files, key=lambda item: item.as_posix()):
+        record = files[output_relative]
+        declared = str(record["license"])
+        source_path = str(record["source_path"])
+        detected = detect_file_license(record["copy_from"])
+
+        if detected is None:
+            entry = acknowledged_license(source_path, acknowledgements)
+            if entry is not None:
+                effective = str(entry["license"])
+                note = f"acknowledged: {entry['reason']}"
+            elif output_relative.suffix.lower() in NOTICE_REQUIRED_SUFFIXES:
+                raise BundleError(
+                    f"{source_path} carries no license notice and is not covered by a "
+                    "license_acknowledgements entry. Record why it may be "
+                    "redistributed, or drop the preset that pulls it in."
+                )
+            else:
+                # Config or asset: follows the preset, whose own evidence path is
+                # validated separately.
+                effective = declared
+                note = "follows the preset"
+        else:
+            effective = detected
+            note = "declared in file"
+
+        allowed = LICENSE_COMPATIBLE_UNDER.get(effective)
+        if allowed is None:
+            raise BundleError(f"{source_path}: unhandled license {effective}")
+        if declared not in allowed:
+            raise BundleError(
+                f"{source_path} is {effective} but its preset declares {declared}. "
+                "Redistributing it would change the bundle's effective license."
+            )
+        rows.append(
+            {
+                "path": output_relative.as_posix(),
+                "source_path": source_path,
+                "effective_license": effective,
+                "preset_license": declared,
+                "basis": note,
+            }
+        )
+    return rows
+
+
 def collect_files(
     sources: dict[str, dict[str, Any]],
     selection: dict[str, Any],
     lock: dict[str, Any],
+    patched: dict[tuple[str, str], dict[str, Any]] | None = None,
 ) -> tuple[dict[PurePosixPath, dict[str, Any]], list[dict[str, Any]]]:
+    patched = patched or {}
     path_limit = int(selection["path_limit_bytes"])
     allowed_extensions = {
         str(extension).lower() for extension in selection["allowed_extensions"]
@@ -764,9 +1175,16 @@ def collect_files(
                 "source_tree": str(source_lock["tree"]),
                 "source_path": source_path.relative_to(checkout).as_posix(),
             }
+            patch = patched.get((source_id, relative_path.as_posix()))
+            if patch:
+                # A patched file is no longer the upstream file, and the manifest
+                # must say so wherever that file's provenance is recorded.
+                metadata["patch_id"] = patch["patch_id"]
+                metadata["patch_sha256"] = patch["patch_sha256"]
+                metadata["source_sha256"] = patch["pre_sha256"]
             record: dict[str, Any] = {
                 **metadata,
-                "copy_from": source_path,
+                "copy_from": patch["path"] if patch else source_path,
                 "source_epoch": int(source_lock["commit_epoch"]),
             }
             existing = files.get(output_relative)
@@ -922,6 +1340,8 @@ def write_recommendations(
                 "display_name": str(row["display_name"]),
                 "reference": reference.as_posix(),
                 "intended_systems": list(row["intended_systems"]),
+                "description": str(row["description"]),
+                "constraints": [str(value) for value in row["constraints"]],
             }
         )
         systems = ", ".join(str(value) for value in row["intended_systems"])
@@ -1005,6 +1425,8 @@ def build_manifest(
     recommendations_path: Path | None,
     recommendations: dict[str, Any] | None,
     file_metadata: dict[str, dict[str, str]],
+    patches: dict[tuple[str, str], dict[str, Any]] | None = None,
+    license_rows: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     file_rows = []
     extension_counts: Counter[str] = Counter()
@@ -1031,6 +1453,23 @@ def build_manifest(
 
     extension_counts[".json"] += 1
     all_preset_rows = preset_rows + recommended_rows
+    # Anything not byte-identical to its upstream source is declared here, so a
+    # reader never has to diff the bundle against the pin to discover it.
+    patch_rows = [
+        {
+            "id": entry["patch_id"],
+            "source_id": source_id,
+            "source_path": relative,
+            "patch_sha256": entry["patch_sha256"],
+            "pre_sha256": entry["pre_sha256"],
+            "post_sha256": entry["post_sha256"],
+            "reason": entry["reason"],
+            "upstream_status": entry["upstream_status"],
+        }
+        for (source_id, relative), entry in sorted(
+            (patches or {}).items(), key=lambda item: item[1]["patch_id"]
+        )
+    ]
     manifest = {
         "schema_version": 2,
         "bundle_id": selection["bundle_id"],
@@ -1058,6 +1497,8 @@ def build_manifest(
         "installed_size_bytes": 0,
         "extension_counts": dict(sorted(extension_counts.items())),
         "presets": sorted(all_preset_rows, key=lambda row: row["path"]),
+        "patches": patch_rows,
+        "license_audit": license_rows or [],
         "files": file_rows,
     }
     if recommendations_path and recommendations:
@@ -1124,14 +1565,25 @@ def build_bundle(
     selection = load_json(selection_path)
     validate_selection(selection, selection_path, lock)
     recommendations_path, recommendations = load_recommendations(selection, lock)
+    validate_released_aliases(
+        recommendations, load_released_aliases(selection, selection_path)
+    )
+    patches = load_patches(selection, selection_path, lock)
     sources = prepare_sources(lock, source, fetch)
-    files, preset_rows = collect_files(sources, selection, lock)
     generated_epoch = bundle_epoch(lock)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(
         prefix=f".{output.name}.build-", dir=output.parent
     ) as temporary:
+        # Patched copies live only for this build; the fetched checkout is never
+        # edited in place, so a later build without the patch is unaffected.
+        patched = materialize_patches(
+            patches, sources, selection_path, Path(temporary) / "patched"
+        )
+        files, preset_rows = collect_files(sources, selection, lock, patched)
+        acknowledgements = load_license_acknowledgements(selection, selection_path)
+        license_rows = validate_file_licenses(files, acknowledgements)
         staging = Path(temporary) / output.name
         staging.mkdir()
         metadata_by_output_path: dict[str, dict[str, str]] = {}
@@ -1178,6 +1630,8 @@ def build_bundle(
             recommendations_path,
             recommendations,
             metadata_by_output_path,
+            patched,
+            license_rows,
         )
         manifest_path = staging / "manifest.json"
         content_size = sum(row["size"] for row in manifest["files"])

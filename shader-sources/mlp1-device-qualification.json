@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "qualification_id": "mlp1-expansion-2026-07-27",
-  "qualified_at": "2026-07-27",
+  "qualification_id": "mlp1-lockbump-2026-09-01",
+  "qualified_at": "2026-09-01",
   "platform": "mlp1",
   "device": {
     "model": "Miniloong Pocket 1",
@@ -11,22 +11,31 @@
     "graphics_api": "OpenGL ES 3.2"
   },
   "retroarch_build": {
-    "version": "v1.22.2",
+    "binary_sha256": "30a09fbe957c056141315e03e3b11fe559dfeff00a092ea7bca982d3ab63a1fd",
+    "build_profile": "release",
     "commit": "69a4f0ea1e8aaf442ae4858f2e7f2b31a1776576",
-    "build_profile": "release"
+    "patches_applied": [
+      "common/0002-portrait-panel-landscape-rotation.patch",
+      "mlp1/0001-command-menu-commands.patch",
+      "mlp1/0002-jawaka-load-content-command.patch",
+      "mlp1/0003-controller-only-bindings-ui.patch",
+      "mlp1/0005-record-scale-clamp.patch",
+      "mlp1/0006-recording-indicator.patch"
+    ],
+    "version": "v1.22.2"
   },
   "shader_source": {
     "url": "https://github.com/libretro/glsl-shaders.git",
-    "commit": "2b2c5ee3fd8e1a3884e20ed424fd9bfbc51cbb3d",
-    "tree": "75d2a0d9e072b912f3479587bb1b4bcd1b55d510"
+    "commit": "235448f244bf676d135f7b25ea6b8e1eae41c4e4",
+    "tree": "51909b8ac493de1b870e07b4dd76a64661feaac1"
   },
   "shader_sources": [
     {
       "id": "libretro-glsl-shaders",
       "url": "https://github.com/libretro/glsl-shaders.git",
-      "commit": "2b2c5ee3fd8e1a3884e20ed424fd9bfbc51cbb3d",
-      "tree": "75d2a0d9e072b912f3479587bb1b4bcd1b55d510",
-      "commit_epoch": 1780511317
+      "commit": "235448f244bf676d135f7b25ea6b8e1eae41c4e4",
+      "tree": "51909b8ac493de1b870e07b4dd76a64661feaac1",
+      "commit_epoch": 1788106747
     },
     {
       "id": "pt-skywalker541",
@@ -115,11 +124,31 @@
       "qualification": "loads"
     },
     {
+      "path": "leaf-bundled/crt/zfast-composite.glslp",
+      "qualification": "loads"
+    },
+    {
+      "path": "leaf-bundled/crt/zfast-crt.glslp",
+      "qualification": "recommended"
+    },
+    {
+      "path": "leaf-bundled/crt/zfast_crt_geo.glslp",
+      "qualification": "recommended"
+    },
+    {
       "path": "leaf-bundled/handheld/gba-color.glslp",
       "qualification": "recommended"
     },
     {
       "path": "leaf-bundled/handheld/gbc-color.glslp",
+      "qualification": "recommended"
+    },
+    {
+      "path": "leaf-bundled/handheld/lcd3x.glslp",
+      "qualification": "recommended"
+    },
+    {
+      "path": "leaf-bundled/handheld/zfast-lcd.glslp",
       "qualification": "recommended"
     },
     {
