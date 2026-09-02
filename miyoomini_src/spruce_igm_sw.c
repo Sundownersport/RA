@@ -91,7 +91,7 @@ static uint16_t igm_read_buttons(void)
    uint16_t bits = 0;
    for (i = 0; i <= RETRO_DEVICE_ID_JOYPAD_R3; i++)
    {
-      if (input_driver_state_wrapper(0, RETRO_DEVICE_JOYPAD, 0, i))
+      if (input_driver_state_raw_joypad(0, i))
          bits |= (1 << i);
    }
    return bits;
